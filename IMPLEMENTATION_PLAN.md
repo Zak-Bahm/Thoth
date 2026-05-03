@@ -113,7 +113,7 @@ Thoth/
 
 ---
 
-## Section 1.1 — Project Setup & Build Configuration
+## Section 1.1 — Project Setup & Build Configuration ✅
 
 ### Goal
 
@@ -131,75 +131,43 @@ Create the Android project skeleton with all dependencies configured, a compilab
 
 ### Dependencies (app/build.gradle.kts)
 
+> **Note:** Several dependency versions were updated during implementation because LiteRT-LM 0.11.0-rc1 ships Kotlin metadata version 2.3.0, which forced a Kotlin upgrade from 2.1.0 to 2.3.0. This cascaded into KSP, Hilt, and AGP upgrades. The `kotlin.plugin.compose` plugin is also required for Kotlin 2.3.0 Compose support. See the actual `build.gradle.kts` files for authoritative versions.
+
+**Root plugins (build.gradle.kts):**
+
+| Plugin | Version |
+|---|---|
+| com.android.application | 8.9.1 |
+| org.jetbrains.kotlin.android | 2.3.0 |
+| org.jetbrains.kotlin.plugin.compose | 2.3.0 |
+| com.google.dagger.hilt.android | 2.58 |
+| com.google.devtools.ksp | 2.3.7 |
+
+**Key dependency versions (app/build.gradle.kts):**
+
+| Dependency | Version | Notes |
+|---|---|---|
+| LiteRT-LM | latest.release (resolved to 0.11.0-rc1) | Requires Kotlin 2.3.0 metadata |
+| Compose BOM | 2025.04.00 | |
+| Hilt | 2.58 | Last version supporting AGP 8.x |
+| kotlin-metadata-jvm | 2.3.0 | Added as KSP dep — workaround for Hilt metadata compat |
+| Room | 2.6.1 | |
+| Navigation Compose | 2.8.0 | |
+| Lifecycle | 2.8.0 | |
+| Coroutines | 1.9.0 | |
+| DataStore | 1.1.0 | |
+| WebKit | 1.11.0 | |
+| Jsoup | 1.17.2 | |
+| java-libkiwix | local AAR | Commented out until AAR is built |
+
 ```kotlin
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("com.google.dagger.hilt.android")
-    id("com.google.devtools.ksp")  // For Room annotation processing
-}
-
-android {
-    namespace = "com.bahm.thoth"
-    compileSdk = 35
-    defaultConfig {
-        applicationId = "com.bahm.thoth"
-        minSdk = 31
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    buildFeatures {
-        compose = true
+// Kotlin jvmTarget is now configured via the compilerOptions DSL (required by Kotlin 2.3.0):
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
-
-dependencies {
-    // LiteRT-LM (Gemma inference)
-    implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
-
-    // java-libkiwix (ZIM file access) — local AAR
-    implementation(files("libs/libkiwix.aar"))
-
-    // Jetpack Compose (use BOM for version alignment)
-    val composeBom = platform("androidx.compose:compose-bom:2025.04.00")
-    implementation(composeBom)
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    debugImplementation("androidx.compose.ui:ui-tooling")
-
-    // Navigation
-    implementation("androidx.navigation:navigation-compose:2.8.0")
-
-    // Lifecycle & ViewModel
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
-
-    // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-
-    // Hilt
-    implementation("com.google.dagger:hilt-android:2.51")
-    ksp("com.google.dagger:hilt-compiler:2.51")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-
-    // Room
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
-
-    // DataStore (for setup preferences)
-    implementation("androidx.datastore:datastore-preferences:1.1.0")
-
-    // WebView (for HTML rendering in chat)
-    implementation("androidx.webkit:webkit:1.11.0")
-}
+// The old kotlinOptions { jvmTarget = "17" } DSL is an error in Kotlin 2.3.0.
 ```
 
 ### Permissions (AndroidManifest.xml)
@@ -221,9 +189,9 @@ dependencies {
 
 ### Verification
 
-- [ ] `./gradlew assembleDebug` completes without errors
-- [ ] App installs and launches on a device/emulator showing a placeholder screen
-- [ ] Hilt injection graph compiles (no missing bindings)
+- [x] `./gradlew assembleDebug` completes without errors
+- [x] App installs and launches on a device/emulator showing a placeholder screen
+- [x] Hilt injection graph compiles (no missing bindings)
 
 ---
 
