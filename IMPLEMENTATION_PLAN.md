@@ -195,7 +195,7 @@ kotlin {
 
 ---
 
-## Section 1.2 — ZIM Integration & Search
+## Section 1.2 — ZIM Integration & Search ✅
 
 ### Goal
 
@@ -331,13 +331,13 @@ Add to `AndroidManifest.xml`:
 
 ### Verification
 
-- [ ] `./gradlew assembleDebug` compiles with libkiwix from Maven Central
-- [ ] App launches and shows the demo screen with download buttons
-- [ ] Downloading a ZIM file shows progress and completes successfully
-- [ ] After download, archive info displays (article count, fulltext index status)
-- [ ] Typing a query and searching returns relevant article titles with scores
-- [ ] Tapping a result shows the article's raw HTML content
-- [ ] Full-text search works (not just title matching)
+- [x] `./gradlew assembleDebug` compiles with libkiwix from Maven Central
+- [x] App launches and shows the demo screen with download buttons
+- [x] Downloading a ZIM file shows progress and completes successfully
+- [x] After download, archive info displays (article count, fulltext index status)
+- [x] Typing a query and searching returns relevant article titles with scores
+- [x] Tapping a result shows the article's raw HTML content
+- [x] Full-text search works (not just title matching)
 
 ---
 

@@ -38,9 +38,11 @@ dependencies {
     // LiteRT-LM (Gemma inference)
     implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
 
-    // java-libkiwix (ZIM file access) — local AAR
-    // TODO: Build libkiwix from source and place .aar in app/libs/
-    // implementation(files("libs/libkiwix.aar"))
+    // java-libkiwix (ZIM file access)
+    implementation("org.kiwix:libkiwix:2.5.0")
+
+    // OkHttp (for ZIM downloading)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Jetpack Compose (BOM for version alignment)
     val composeBom = platform("androidx.compose:compose-bom:2025.04.00")
@@ -81,4 +83,8 @@ dependencies {
 
     // Jsoup (HTML parsing for article chunker)
     implementation("org.jsoup:jsoup:1.17.2")
+
+    // Test
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
