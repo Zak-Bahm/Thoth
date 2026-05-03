@@ -6,19 +6,24 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -34,10 +39,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.bahm.thoth.inference.LlmState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +55,12 @@ fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
     val selectedArticle by viewModel.selectedArticle.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val pipelineState by viewModel.pipelineState.collectAsState()
+    val modelDownloadStatus by viewModel.modelDownloadStatus.collectAsState()
+    val modelFileExists by viewModel.modelFileExists.collectAsState()
+    val llmState by viewModel.llmState.collectAsState()
+    val chatMessages by viewModel.chatMessages.collectAsState()
+    val chatInput by viewModel.chatInput.collectAsState()
+    val isGenerating by viewModel.isGenerating.collectAsState()
 
     // Request notification permission on Android 13+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -89,6 +102,12 @@ fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
                 searchQuery = searchQuery,
                 searchResults = searchResults,
                 pipelineState = pipelineState,
+                modelDownloadStatus = modelDownloadStatus,
+                modelFileExists = modelFileExists,
+                llmState = llmState,
+                chatMessages = chatMessages,
+                chatInput = chatInput,
+                isGenerating = isGenerating,
                 onDownloadMini = viewModel::downloadMini,
                 onDownloadNopic = viewModel::downloadNopic,
                 onCancelDownload = viewModel::cancelDownload,
@@ -96,6 +115,13 @@ fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
                 onSearch = viewModel::search,
                 onSearchPipeline = viewModel::searchPipeline,
                 onArticleClick = viewModel::selectArticle,
+                onDownloadModel = viewModel::downloadModel,
+                onCancelModelDownload = viewModel::cancelModelDownload,
+                onLoadModel = viewModel::loadModel,
+                onReleaseModel = viewModel::releaseModel,
+                onChatInputChange = viewModel::updateChatInput,
+                onSendChat = viewModel::sendChatMessage,
+                onResetChat = viewModel::resetChat,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
@@ -111,6 +137,12 @@ private fun DemoContent(
     searchQuery: String,
     searchResults: List<SearchResultItem>,
     pipelineState: PipelineSearchState,
+    modelDownloadStatus: DownloadStatus,
+    modelFileExists: Boolean,
+    llmState: LlmState,
+    chatMessages: List<ChatMessage>,
+    chatInput: String,
+    isGenerating: Boolean,
     onDownloadMini: () -> Unit,
     onDownloadNopic: () -> Unit,
     onCancelDownload: () -> Unit,
@@ -118,6 +150,13 @@ private fun DemoContent(
     onSearch: () -> Unit,
     onSearchPipeline: () -> Unit,
     onArticleClick: (String) -> Unit,
+    onDownloadModel: () -> Unit,
+    onCancelModelDownload: () -> Unit,
+    onLoadModel: () -> Unit,
+    onReleaseModel: () -> Unit,
+    onChatInputChange: (String) -> Unit,
+    onSendChat: () -> Unit,
+    onResetChat: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier = modifier.padding(horizontal = 16.dp)) {
@@ -331,6 +370,226 @@ private fun DemoContent(
                         )
                     }
                 }
+            }
+        }
+
+        // Model Download section
+        item {
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(16.dp))
+            Text("Model", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+
+            when (modelDownloadStatus) {
+                is DownloadStatus.Idle -> {
+                    Button(
+                        onClick = onDownloadModel,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Download Gemma 4 E4B (~3.6 GB)")
+                    }
+                }
+
+                is DownloadStatus.Downloading -> {
+                    val progress = modelDownloadStatus
+                    if (progress.totalBytes > 0) {
+                        val fraction = progress.bytesDownloaded.toFloat() / progress.totalBytes
+                        LinearProgressIndicator(
+                            progress = { fraction },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "%.1f / %.1f GB".format(
+                                progress.bytesDownloaded / 1_000_000_000.0,
+                                progress.totalBytes / 1_000_000_000.0,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "%.1f GB downloaded".format(
+                                progress.bytesDownloaded / 1_000_000_000.0,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onCancelModelDownload) {
+                        Text("Cancel")
+                    }
+                }
+
+                is DownloadStatus.Complete -> {
+                    Text("Model downloaded", color = MaterialTheme.colorScheme.primary)
+                }
+
+                is DownloadStatus.Error -> {
+                    Text(
+                        "Error: ${modelDownloadStatus.message}",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = onDownloadModel) {
+                        Text("Retry")
+                    }
+                }
+            }
+        }
+
+        // Model Loading section
+        if (modelFileExists) {
+            item {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(16.dp))
+                Text("Model Loading", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+
+                when (llmState) {
+                    is LlmState.Uninitialized -> {
+                        Button(
+                            onClick = onLoadModel,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Load Model")
+                        }
+                    }
+
+                    is LlmState.Initializing -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.width(12.dp))
+                            Text("Loading model...", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+
+                    is LlmState.Ready -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Model ready",
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedButton(onClick = onReleaseModel) {
+                                Text("Release")
+                            }
+                        }
+                    }
+
+                    is LlmState.Error -> {
+                        Text(
+                            "Error: ${llmState.message}",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Button(onClick = onLoadModel) {
+                            Text("Retry")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Basic Chat section
+        if (llmState is LlmState.Ready) {
+            item {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Chat",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (chatMessages.isNotEmpty()) {
+                        OutlinedButton(onClick = onResetChat) {
+                            Text("Reset")
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+
+            items(chatMessages.size, key = { it }) { index ->
+                val message = chatMessages[index]
+                val isUser = message.role == "user"
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isUser) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                    ),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            if (isUser) "You" else "Thoth",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isUser) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            message.text.ifEmpty { "..." },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isUser) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+            }
+
+            item {
+                if (isGenerating) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = chatInput,
+                        onValueChange = onChatInputChange,
+                        label = { Text("Ask a question") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        enabled = !isGenerating,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = onSendChat,
+                        enabled = chatInput.isNotBlank() && !isGenerating,
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
             }
         }
 

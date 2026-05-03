@@ -33,5 +33,9 @@
             android:name=".knowledge.ZimDownloadForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+        <service
+            android:name=".inference.ModelDownloadForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
     </application>
 </manifest>

@@ -439,7 +439,7 @@ Extend the demo screen from Section 1.2 with a pipeline search tab/section:
 
 ---
 
-## Section 1.4 — LLM Integration (Model Download, Loading & Basic Chat)
+## Section 1.4 — LLM Integration (Model Download, Loading & Basic Chat) ✅
 
 ### Goal
 
@@ -558,13 +558,13 @@ No new dependencies needed — LiteRT-LM and OkHttp are already configured.
 
 ### Verification
 
-- [ ] `./gradlew assembleDebug` compiles without errors
-- [ ] Model download shows progress and completes successfully
-- [ ] Model loads successfully and reports ready state (5-15 sec with loading indicator)
-- [ ] Sending a message produces streamed token output in the demo UI
-- [ ] Error handling: app shows meaningful error if model file is missing or corrupt
-- [ ] Memory: model + inference stays under ~5.5 GB RAM
-- [ ] Reset/release works — no memory leaks after releasing model
+- [x] `./gradlew assembleDebug` compiles without errors
+- [x] Model download shows progress and completes successfully
+- [x] Model loads successfully and reports ready state (5-15 sec with loading indicator)
+- [x] Sending a message produces streamed token output in the demo UI
+- [x] Error handling: app shows meaningful error if model file is missing or corrupt
+- [x] Memory: model + inference stays under ~5.5 GB RAM
+- [x] Reset/release works — no memory leaks after releasing model
 
 ---
 
