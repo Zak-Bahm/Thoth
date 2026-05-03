@@ -297,7 +297,7 @@ Replace the placeholder "Thoth" text in `MainActivity` with a demo screen (`ui/d
 2. **Archive section:** After download, show archive info (filename, article count from `archive.getAllEntryCount()`, has fulltext index).
 3. **Search section:** Text field for entering search queries. "Search" button. Results list showing article titles and Xapian relevance scores. Tap an article to see its raw HTML content in a scrollable text view.
 
-This is a temporary developer screen — it will be replaced by the real setup flow in Section 1.6.
+This is a temporary developer screen — it will be replaced by the real setup flow in Section 1.7.
 
 ### Dependencies
 
@@ -439,15 +439,17 @@ Extend the demo screen from Section 1.2 with a pipeline search tab/section:
 
 ---
 
-## Section 1.4 — Inference Layer (LLM + Tool Calling)
+## Section 1.4 — LLM Integration (Model Download, Loading & Basic Chat)
 
 ### Goal
 
-Integrate Gemma 4 E4B via LiteRT-LM with tool calling support, so the model can invoke the search pipeline and generate cited responses.
+Integrate Gemma 4 E4B via LiteRT-LM: download the model, load it into RAM, and get basic (non-tool-calling) chat working in the demo UI. Tool calling, system prompts, and citation enforcement are deferred to Section 1.5.
 
 ### Requirements
 
 #### 1.4a — LlmService
+
+Manages engine lifecycle and basic conversation.
 
 ```kotlin
 @Singleton
@@ -457,9 +459,9 @@ class LlmService @Inject constructor() {
 
     suspend fun initialize(modelPath: String)       // Load model, ~5-15 sec
     fun isInitialized(): Boolean
-    suspend fun createConversation(tools: ToolSet): Conversation
-    fun getConversation(): Conversation?
-    suspend fun resetConversation()
+    fun createConversation()                         // Basic chat, no tools yet
+    fun sendMessage(text: String): Flow<String>      // Streaming token output
+    fun resetConversation()
     fun release()                                    // Free model resources
 }
 ```
@@ -473,16 +475,13 @@ suspend fun initialize(modelPath: String) = withContext(Dispatchers.Default) {
 }
 ```
 
-**Conversation setup:**
+**Conversation setup (basic — no tools or system prompt):**
 ```kotlin
-suspend fun createConversation(tools: ToolSet): Conversation {
+fun createConversation() {
     val config = ConversationConfig(
-        systemInstruction = SYSTEM_PROMPT,
-        tools = listOf(tools),
-        automaticToolCalling = true,  // LiteRT-LM handles tool execution
+        samplerConfig = SamplerConfig(topK = 40, topP = 0.95f, temperature = 0.7f),
     )
     conversation = engine!!.createConversation(config)
-    return conversation!!
 }
 ```
 
@@ -490,32 +489,119 @@ suspend fun createConversation(tools: ToolSet): Conversation {
 ```kotlin
 fun sendMessage(text: String): Flow<String> {
     return conversation!!.sendMessageAsync(text)
-    // Each emission is a token/chunk
-    // Tool calls are executed automatically by LiteRT-LM
-    // Final emissions are the model's text response after tool results
+        .map { message ->
+            // Each emission is a Message object — extract text content
+            message.contents.contents
+                .filterIsInstance<Content.Text>()
+                .joinToString("") { it.text }
+        }
 }
 ```
 
-#### 1.4b — ThothTools (Tool Definitions)
+**API notes:**
+- `ConversationConfig.systemInstruction` takes `Contents?`, not `String` — use `Contents.of(...)` when adding system prompt in Section 1.5
+- Engine and Conversation implement `AutoCloseable` — use `.close()` in `release()`
+- `engine.initialize()` is a blocking CPU-heavy call — must not run on main thread
+
+#### 1.4b — ModelDownloadService
+
+Downloads the Gemma 4 E4B `.litertlm` model file to app storage. Follows the same pattern as `ZimDownloadService`/`ZimDownloadForegroundService`.
+
+```kotlin
+@Singleton
+class ModelDownloadService @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    fun getDownloadDir(): File      // context.getExternalFilesDir(null)/models/
+    fun getModelFile(): File?       // Returns model file if it exists
+}
+```
+
+- Download URL: from HuggingFace (`https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/<filename>`)
+- Destination: `context.getExternalFilesDir(null)/models/`
+- Uses a foreground service for download (same pattern as ZIM downloads)
+- Emits download progress via `StateFlow` for UI progress bar
+- Supports resume via HTTP Range header (model is ~2.5 GB)
+- Cancellation via coroutine cancellation
+- Uses OkHttp (already in deps)
+
+#### 1.4c — Demo UI Extension
+
+Extend the demo screen with model download, loading, and basic chat sections:
+
+**Model Download section:**
+- "Download Gemma 4 E4B (~2.5 GB)" button
+- Progress bar during download
+- Status text (downloading / complete / error)
+
+**Model Loading section (visible after download):**
+- "Load Model" button — shows loading spinner during 5-15 sec load
+- Status indicator: Loading / Ready / Error
+
+**Basic Chat section (visible after model loaded):**
+- Text input field
+- "Send" button — disabled while generating
+- Scrollable text area showing streaming response
+
+### Dependencies
+
+No new dependencies needed — LiteRT-LM and OkHttp are already configured.
+
+### Guidance
+
+- LiteRT-LM documentation: https://ai.google.dev/edge/litert-lm/android
+- LiteRT-LM Kotlin API: https://github.com/google-ai-edge/LiteRT-LM
+- The model file format is `.litertlm` — ensure the correct Gemma 4 E4B quantized model is used. Check https://huggingface.co/litert-community for pre-converted models.
+- Model loading takes 5-15 seconds. Show a loading indicator.
+- Token generation speed: expect 6-12 tok/s on flagship devices (Snapdragon 8 Gen 2+), slower on mid-range. A 500-token response takes 40-80 seconds.
+- Batch UI updates during token streaming (every ~50ms) to avoid excessive recomposition.
+
+### Verification
+
+- [ ] `./gradlew assembleDebug` compiles without errors
+- [ ] Model download shows progress and completes successfully
+- [ ] Model loads successfully and reports ready state (5-15 sec with loading indicator)
+- [ ] Sending a message produces streamed token output in the demo UI
+- [ ] Error handling: app shows meaningful error if model file is missing or corrupt
+- [ ] Memory: model + inference stays under ~5.5 GB RAM
+- [ ] Reset/release works — no memory leaks after releasing model
+
+---
+
+## Section 1.5 — Tool Calling & Cited Responses
+
+### Goal
+
+Wire the LLM to the search pipeline via LiteRT-LM's tool calling so the model can invoke `searchKnowledge` and `lookupArticle`, add a system prompt enforcing citation rules, and implement fallback logic for when the model skips search.
+
+### Requirements
+
+#### 1.5a — ThothTools (Tool Definitions)
 
 ```kotlin
 class ThothTools @Inject constructor(
     private val searchService: SearchService,
+    private val zimRepository: ZimRepository,
 ) : ToolSet {
+
+    var callCount: Int = 0  // Instrumentation for ToolHandler
 
     @Tool(description = "Search Wikipedia for articles matching a query. You MUST call this tool before answering ANY factual question. Use specific keywords, names, and technical terms.")
     fun searchKnowledge(
         @ToolParam(description = "Search query with specific keywords")
         query: String
     ): List<Map<String, String>> {
+        callCount++
         val result = runBlocking { searchService.search(query, topK = 5) }
-        return result.passages.map { passage ->
-            mapOf(
-                "title" to passage.articleTitle,
-                "section" to (passage.sectionHeading ?: ""),
-                "content" to passage.text,
-            )
-        }
+        return result.passages
+            .enforceBudget(MAX_CONTEXT_CHARS)
+            .map { passage ->
+                mapOf(
+                    "title" to passage.articleTitle,
+                    "section" to (passage.sectionHeading ?: ""),
+                    "content" to passage.text,
+                )
+            }
     }
 
     @Tool(description = "Retrieve the full content of a specific Wikipedia article by its exact title. Use this when you need more detail from an article found via searchKnowledge.")
@@ -523,11 +609,13 @@ class ThothTools @Inject constructor(
         @ToolParam(description = "Exact Wikipedia article title")
         title: String
     ): Map<String, String> {
-        val article = runBlocking { /* zimRepository.getArticleByTitle(title) */ }
-        // Return truncated content (~4000 tokens max)
+        callCount++
+        val article = runBlocking { zimRepository.getArticleByTitle(title) }
+        // Strip HTML to plain text with Jsoup, truncate to ~16000 chars
+        val plainText = Jsoup.parse(article?.htmlContent ?: "").text().take(16000)
         return mapOf(
             "title" to (article?.title ?: "Not found"),
-            "content" to (article?.htmlContent?.take(16000) ?: "Article not found."),
+            "content" to plainText.ifEmpty { "Article not found." },
         )
     }
 }
@@ -535,21 +623,14 @@ class ThothTools @Inject constructor(
 
 **Note on `runBlocking`:** LiteRT-LM's tool calling executes tools synchronously on its internal thread. The tools must return values directly, not suspend functions. Use `runBlocking` to bridge to the suspend-based `SearchService`. This is acceptable because tool execution happens on LiteRT-LM's inference thread, not the main thread.
 
-#### 1.4c — ToolHandler (Fallback Logic)
+#### 1.5b — Context Budget
 
-The `ToolHandler` guards against two failure modes:
+- Limit tool results injected into context to ~4,000 tokens total (~16,000 characters)
+- This means top 5 passages of ~800 tokens each
+- Gemma 4 E4B has a 128K context window, but small models degrade with long contexts — attention becomes diffuse and the model may hallucinate or ignore later passages
+- If passage text exceeds the budget, drop trailing passages (keep highest-ranked)
 
-1. **Model skips search:** If `automaticToolCalling = true` handles this transparently (the model must produce a tool call to get a tool result), this may be handled by LiteRT-LM itself. However, the model can choose to answer WITHOUT calling a tool. If this happens:
-   - Detect: check if the model's response contains any tool call before the text response
-   - Action: discard the response, auto-construct a `searchKnowledge(userQuery)` call, inject results into context, and re-prompt the model
-
-2. **Model produces malformed tool call:** LiteRT-LM's constrained decoding should prevent this when tool definitions are registered. If it still occurs:
-   - Detect: catch JSON parse errors or unknown tool names
-   - Action: extract any quoted strings from the malformed output as query terms, fall back to `searchKnowledge` with those terms
-
-**Implementation depends on LiteRT-LM's behavior with `automaticToolCalling`:** If the framework guarantees tools are always called before a response is generated (based on the system prompt), explicit detection may not be needed. Test this empirically during implementation and add fallback logic only if the model produces ungrounded responses.
-
-#### 1.4d — System Prompt
+#### 1.5c — System Prompt
 
 ```
 You are Thoth, an offline knowledge assistant. You answer questions using Wikipedia articles stored on this device.
@@ -564,35 +645,51 @@ RULES:
 7. For follow-up questions about a topic already discussed, you may reference previously retrieved content without searching again.
 ```
 
-#### 1.4e — Context Budget
+Store as a constant in `SystemPrompt.kt` for easy iteration.
 
-- Limit tool results injected into context to ~4,000 tokens total
-- This means top 5 passages of ~800 tokens each
-- Gemma 4 E4B has a 128K context window, but small models degrade with long contexts — attention becomes diffuse and the model may hallucinate or ignore later passages
-- If passage text exceeds the budget, truncate the last passages, not the first (ranked by relevance)
+#### 1.5d — ToolHandler (Fallback Logic)
+
+The `ToolHandler` guards against the model answering without calling tools.
+
+**Detection:** Use instrumentation — `ThothTools.callCount` is reset before each user message and checked after response completes. If `callCount == 0`, the model skipped search.
+
+**Action on skip:** Return the user's query as a fallback search query. The ViewModel can then manually call `searchKnowledge`, inject results, and re-prompt — or log a warning for tuning in Section 1.8.
+
+**Malformed tool calls:** LiteRT-LM's constrained decoding should prevent this when tool definitions are registered. If it still occurs, catch JSON parse errors and fall back to `searchKnowledge` with extracted query terms.
+
+**Implementation depends on LiteRT-LM's behavior with `automaticToolCalling`:** If the framework guarantees tools are always called before a response is generated (based on the system prompt), explicit detection may not be needed. Test this empirically during implementation and add fallback logic only if the model produces ungrounded responses.
+
+#### 1.5e — LlmService Updates
+
+Modify `LlmService` (from Section 1.4) to wire in tools and system prompt:
+
+- Add `ThothTools` to constructor
+- Update `createConversation()`:
+  - Add `systemInstruction = Contents.of(SystemPrompt.THOTH_SYSTEM_PROMPT)`
+  - Add `tools = listOf(tool(thothTools))`
+  - Add `automaticToolCalling = true`
+- Expose `getToolCallCount()` and `resetToolCallCount()` for ToolHandler
+
+**If `automaticToolCalling` doesn't reliably force search:** Switch to `automaticToolCalling = false` and manually parse + route tool calls in `sendMessage()`.
 
 ### Guidance
 
-- LiteRT-LM documentation: https://ai.google.dev/edge/litert-lm/android
-- LiteRT-LM Kotlin API: https://github.com/google-ai-edge/LiteRT-LM
-- The model file format is `.litertlm` — ensure the correct Gemma 4 E4B quantized model is used. Check https://huggingface.co/litert-community for pre-converted models.
-- Model loading takes 5-15 seconds. Show a loading indicator. Consider loading on app start via a ViewModel that exposes loading state.
-- Token generation speed: expect 6-12 tok/s on flagship devices (Snapdragon 8 Gen 2+), slower on mid-range. A 500-token response takes 40-80 seconds.
 - Test tool calling behavior early. If `automaticToolCalling` doesn't reliably force search, switch to `automaticToolCalling = false` and manually parse + route tool calls.
+- Add ProGuard keep rule for `ThothTools`: `-keep class com.bahm.thoth.inference.ThothTools { *; }` — `@Tool`/`@ToolParam` annotations use runtime reflection.
+- Token generation speed: expect 6-12 tok/s on flagship devices (Snapdragon 8 Gen 2+), slower on mid-range. A 500-token response takes 40-80 seconds.
 
 ### Verification
 
-- [ ] Model loads successfully and reports ready state
-- [ ] Sending a message produces streamed token output
 - [ ] Tool calling works: model generates `searchKnowledge` call, results are returned, model produces cited response
 - [ ] System prompt enforcement: model cites sources in every factual response
 - [ ] Context stays within ~4,000 token budget for retrieved passages
-- [ ] Error handling: app shows meaningful error if model file is missing or corrupt
-- [ ] Memory: model + inference stays under ~5.5 GB RAM
+- [ ] `lookupArticle` returns stripped plain text, not raw HTML
+- [ ] ToolHandler detects when model skips search
+- [ ] Error handling: meaningful errors for edge cases (no search results, article not found)
 
 ---
 
-## Section 1.5 — Chat UI
+## Section 1.6 — Chat UI
 
 ### Goal
 
@@ -600,7 +697,7 @@ Build the chat interface: message list with streaming responses, HTML rendering 
 
 ### Requirements
 
-#### 1.5a — Chat Data Model (UI layer)
+#### 1.6a — Chat Data Model (UI layer)
 
 ```kotlin
 enum class Role { USER, ASSISTANT }
@@ -621,7 +718,7 @@ data class Source(
 )
 ```
 
-#### 1.5b — ChatViewModel
+#### 1.6b — ChatViewModel
 
 ```kotlin
 @HiltViewModel
@@ -650,7 +747,7 @@ class ChatViewModel @Inject constructor(
 
 **Streaming UX:** Update the assistant message in `_messages` as each token arrives. Use `StateFlow` — Compose will recompose only the affected message item. Avoid updating more frequently than every ~50ms to prevent excessive recomposition (batch tokens if they arrive faster).
 
-#### 1.5c — ChatScreen
+#### 1.6c — ChatScreen
 
 ```kotlin
 @Composable
@@ -681,7 +778,7 @@ fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
 }
 ```
 
-#### 1.5d — MessageRenderer (WebView for HTML)
+#### 1.6d — MessageRenderer (WebView for HTML)
 
 Assistant responses may contain HTML formatting (tables, lists, bold/italic). Render them in a sandboxed WebView.
 
@@ -729,13 +826,13 @@ fun AssistantMessageBubble(message: ChatMessage) {
 
 **Simpler alternative:** For v1, consider rendering plain text with Compose `Text` and only using WebView for responses containing `<table>` or other complex HTML. Use Compose's `AnnotatedString` for basic bold/italic.
 
-#### 1.5e — Source Citations
+#### 1.6e — Source Citations
 
 - Extract sources from the tool call results that were used to generate the response
 - Display as Material3 `AssistChip` components below each message
 - Tapping a chip navigates to `ArticleScreen` which renders the full ZIM article HTML in a WebView
 
-#### 1.5f — ChatInputBar
+#### 1.6f — ChatInputBar
 
 - `TextField` with a send `IconButton`
 - Disabled while `isGenerating` is true
@@ -761,7 +858,7 @@ fun AssistantMessageBubble(message: ChatMessage) {
 
 ---
 
-## Section 1.6 — Setup Flow & Data Persistence
+## Section 1.7 — Setup Flow & Data Persistence
 
 ### Goal
 
@@ -769,7 +866,7 @@ Build the first-launch setup screen (file selection for model and ZIM) and Room-
 
 ### Requirements
 
-#### 1.6a — SetupScreen
+#### 1.7a — SetupScreen
 
 First-launch flow presented when model or ZIM file paths are not configured:
 
@@ -798,7 +895,7 @@ class SetupViewModel @Inject constructor(
 
 **Note:** ZIM files are large. Copying them into app-specific storage is ideal for performance (direct file I/O) but doubles storage usage temporarily. Consider allowing in-place access if the file is already on accessible storage.
 
-#### 1.6b — Room Database
+#### 1.7b — Room Database
 
 ```kotlin
 @Database(
@@ -849,7 +946,7 @@ interface ChatHistoryDao {
 }
 ```
 
-#### 1.6c — Navigation
+#### 1.7c — Navigation
 
 ```kotlin
 // NavGraph.kt
@@ -885,7 +982,7 @@ Determine start destination by checking DataStore for valid model + ZIM paths on
 
 ---
 
-## Section 1.7 — Integration Testing & Polish
+## Section 1.8 — Integration Testing & Polish
 
 ### Goal
 
