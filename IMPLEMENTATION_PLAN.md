@@ -158,7 +158,7 @@ Create the Android project skeleton with all dependencies configured, a compilab
 | DataStore | 1.1.0 | |
 | WebKit | 1.11.0 | |
 | Jsoup | 1.17.2 | |
-| java-libkiwix | local AAR | Commented out until AAR is built |
+| java-libkiwix | 2.5.0 | From Maven Central (`org.kiwix:libkiwix`) |
 
 ```kotlin
 // Kotlin jvmTarget is now configured via the compilerOptions DSL (required by Kotlin 2.3.0):
@@ -183,7 +183,7 @@ kotlin {
 
 ### Guidance
 
-- java-libkiwix must be built from source (https://github.com/kiwix/java-libkiwix). Requires Java 17 and the Android NDK. Build with `./gradlew build` and copy the output `.aar` from `lib/build/outputs/aar/` into `app/libs/`.
+- java-libkiwix is available on Maven Central as `org.kiwix:libkiwix:2.5.0`. No local AAR build needed.
 - Use KSP (not KAPT) for annotation processing — it's faster and is the recommended path for Hilt and Room.
 - LiteRT-LM version coordinates may change; check https://ai.google.dev/edge/litert-lm/android for the latest.
 
@@ -195,11 +195,11 @@ kotlin {
 
 ---
 
-## Section 1.2 — Knowledge Layer (ZIM Access, Search, Chunking)
+## Section 1.2 — ZIM Integration & Search
 
 ### Goal
 
-Build the complete knowledge retrieval pipeline: open ZIM files, search for articles, chunk them into passages, and rank passages with BM25.
+Integrate java-libkiwix, add in-app ZIM archive downloading, implement data models and ZimRepository, and deliver a demo UI for downloading Wikipedia archives and performing manual searches.
 
 ### Requirements
 
@@ -235,42 +235,121 @@ data class SearchResult(
 
 #### 1.2b — ZimRepository
 
-Wrapper around java-libkiwix's `Archive` class.
+Wrapper around java-libkiwix's `Archive` class. java-libkiwix is available on Maven Central as `org.kiwix:libkiwix:2.5.0` — the `org.kiwix.libzim` package provides full Xapian search support via `Searcher`, `Query`, `Search`, and `SearchIterator` classes.
 
 ```kotlin
 @Singleton
 class ZimRepository @Inject constructor() {
     private var archive: Archive? = null
 
-    fun open(zimFilePath: String)
-    fun close()
+    suspend fun open(zimFilePath: String)
+    suspend fun close()
     fun isOpen(): Boolean
-    fun getArticleByTitle(title: String): Article?
-    fun getArticleByPath(path: String): Article?
-    fun getArticleContent(path: String): String   // Returns raw HTML
-    fun searchArticles(query: String, maxResults: Int = 20): List<Article>
+    suspend fun getArticleByTitle(title: String): Article?
+    suspend fun getArticleByPath(path: String): Article?
+    suspend fun getArticleContent(path: String): String   // Returns raw HTML
+    suspend fun searchArticles(query: String, maxResults: Int = 20): List<Article>
 }
 ```
 
-**Critical implementation detail — full-text search:** The java-libkiwix wrapper's search API exposure is uncertain. Investigate in this order:
+**Full-text search implementation:** Use libzim's Xapian full-text search:
+- `Searcher(archive).search(Query(queryString)).getResults(0, maxResults)`
+- `SearchIterator` yields `Entry` objects with `getTitle()`, `getPath()`, `getScore()`
+- Load HTML via `entry.getItem(true).getData().getData()` (follow redirects)
+- Check `archive.hasFulltextIndex()` — Wikipedia mini/nopic ZIMs include Xapian indexes
+- Fall back to `SuggestionSearcher` (title-prefix) if no fulltext index is present
 
-1. **Check for `Searcher`/`Search` classes** in the built `.aar`. The C++ libkiwix exposes `kiwix::Searcher` which wraps Xapian full-text search. If the JNI binding includes these, use them — they return ranked results with scores.
+**Resource management:** All libzim objects (`Searcher`, `Query`, `Search`, `SearchIterator`, `Blob`) have `dispose()` methods — call them via try/finally to prevent native memory leaks.
 
-2. **Reference kiwix-android source** (https://github.com/kiwix/kiwix-android). Search their codebase for how they implement article search. They solve the same problem and their approach is the authoritative pattern for Android.
+**Thread safety:** The `Archive` object is not thread-safe — use a `Mutex` and confine all access to `Dispatchers.IO`.
 
-3. **Fallback to title-prefix matching** as a temporary measure if full-text search is not exposed. Use `Archive.getEntryByTitle()` with progressively shorter prefixes. This is inadequate for production but unblocks development.
+#### 1.2c — ZimDownloadService
 
-4. **Fallback to SQLite FTS5** if none of the above provides ranked full-text search. Build a one-time index on first launch:
-   - Iterate all ZIM entries
-   - Extract title + first 500 words per article
-   - Insert into FTS5 virtual table
-   - Query with `MATCH` and rank with built-in `bm25()` function
-   - Expected index size: ~200-500 MB for Wikipedia mini
-   - Expected build time: 10-30 minutes on-device
+Downloads ZIM archives from `https://download.kiwix.org/zim/wikipedia/`.
 
-All ZIM I/O must run on `Dispatchers.IO`. The `Archive` object is not thread-safe — use a `Mutex` or confine access to a single-threaded dispatcher.
+```kotlin
+@Singleton
+class ZimDownloadService @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    data class DownloadProgress(val bytesDownloaded: Long, val totalBytes: Long)
 
-#### 1.2c — ArticleChunker
+    fun download(url: String, filename: String): Flow<DownloadProgress>
+    fun cancelDownload()
+    fun getDownloadDir(): File  // context.getExternalFilesDir(null)/zim/
+}
+```
+
+- Use OkHttp streaming download to `context.getExternalFilesDir(null)/zim/`
+- Emit `DownloadProgress` via `Flow` for UI progress bar
+- Support resume via HTTP Range header (ZIM files are large)
+- Cancellation via coroutine cancellation
+
+Available archives (hardcoded for now, OPDS discovery can be added later):
+- Wikipedia mini EN: `wikipedia_en_all_mini_2026-03.zim` (~12 GB)
+- Wikipedia nopic EN: `wikipedia_en_all_nopic_2026-03.zim` (~48 GB)
+
+#### 1.2d — Demo UI
+
+Replace the placeholder "Thoth" text in `MainActivity` with a demo screen (`ui/demo/ZimDemoScreen.kt` + `ZimDemoViewModel.kt`):
+
+1. **Download section:** Two buttons — "Download Wikipedia Mini (~12 GB)" and "Download Wikipedia Nopic (~48 GB)". Progress bar showing download progress. Status text (downloading, complete, error).
+2. **Archive section:** After download, show archive info (filename, article count from `archive.getAllEntryCount()`, has fulltext index).
+3. **Search section:** Text field for entering search queries. "Search" button. Results list showing article titles and Xapian relevance scores. Tap an article to see its raw HTML content in a scrollable text view.
+
+This is a temporary developer screen — it will be replaced by the real setup flow in Section 1.6.
+
+### Dependencies
+
+Add to `app/build.gradle.kts`:
+
+```kotlin
+// java-libkiwix (replaces commented-out local AAR)
+implementation("org.kiwix:libkiwix:2.5.0")
+
+// OkHttp (for ZIM downloading)
+implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+// Test dependencies
+testImplementation("junit:junit:4.13.2")
+testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+```
+
+Add to `AndroidManifest.xml`:
+
+```xml
+<!-- Required for ZIM archive downloads — app remains offline after setup -->
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
+### Guidance
+
+- Use KSP (not KAPT) for annotation processing — already configured in Section 1.1.
+- All ZIM I/O must run on `Dispatchers.IO` behind a `Mutex`.
+- The demo UI is throwaway — keep it simple, no need for polish.
+- For the download service, OkHttp's streaming body is sufficient. No need for a full download manager library.
+
+### Verification
+
+- [ ] `./gradlew assembleDebug` compiles with libkiwix from Maven Central
+- [ ] App launches and shows the demo screen with download buttons
+- [ ] Downloading a ZIM file shows progress and completes successfully
+- [ ] After download, archive info displays (article count, fulltext index status)
+- [ ] Typing a query and searching returns relevant article titles with scores
+- [ ] Tapping a result shows the article's raw HTML content
+- [ ] Full-text search works (not just title matching)
+
+---
+
+## Section 1.3 — Article Chunking & Search Pipeline
+
+### Goal
+
+Add the passage-level retrieval pipeline: chunk HTML articles into ~512-token passages, rank them with BM25, and orchestrate the full search flow via `SearchService`. Extend the demo UI to show chunked passages and BM25-ranked results.
+
+### Requirements
+
+#### 1.3a — ArticleChunker
 
 Converts raw HTML articles into ~512-token plain text passages.
 
@@ -285,11 +364,11 @@ Converts raw HTML articles into ~512-token plain text passages.
 6. Tables: if a `<table>` fits in 512 tokens, keep it as a single chunk. If larger, skip it (tables in Wikipedia are often data-heavy and low-value for QA).
 7. Lists: keep `<ul>`/`<ol>` items together when possible
 
-**HTML parsing:** Use Android's built-in `android.text.Html.fromHtml()` for basic tag stripping, or a lightweight library like Jsoup if finer structural control is needed. Jsoup adds ~400 KB to the APK and provides proper DOM traversal — likely worth it for the chunker.
+**HTML parsing:** Use Jsoup (`org.jsoup:jsoup:1.17.2`, already in deps) for DOM traversal and structural extraction.
 
 **Output:** `List<Passage>` with metadata (article title, section heading, ZIM path, chunk index).
 
-#### 1.2d — Bm25Scorer
+#### 1.3b — Bm25Scorer
 
 In-memory BM25 scoring over a set of candidate passages. This is NOT a search index — it re-ranks passages that have already been retrieved.
 
@@ -312,7 +391,7 @@ where:
 - Remove a small stopword set (the, is, at, which, on, a, an, and, or, but, in, with, to, for, of)
 - IDF is computed over the candidate set only (typically 50-200 passages), not the global corpus
 
-#### 1.2e — SearchService
+#### 1.3c — SearchService
 
 Orchestrates the full retrieval pipeline.
 
@@ -335,26 +414,32 @@ class SearchService @Inject constructor(
 
 Run the entire pipeline on `Dispatchers.IO`. Measure and log total search time.
 
+#### 1.3d — Demo UI Extension
+
+Extend the demo screen from Section 1.2 with a pipeline search tab/section:
+
+- Text field + "Search Pipeline" button running `SearchService.search()` end-to-end
+- Results displayed as ranked passages with: article title, section heading, passage text (truncated preview), BM25 score, search time in milliseconds
+- Allows comparing raw ZIM search (article-level) vs. pipeline search (passage-level)
+
 ### Guidance
 
-- **Jsoup** (`org.jsoup:jsoup:1.17.2`) is recommended for HTML parsing in the chunker. It provides CSS selectors and DOM traversal that `Html.fromHtml()` lacks.
 - The BM25 scorer is ~50 lines of code. Don't over-engineer it — it processes at most a few hundred passages per query.
 - For tokenization in BM25, a simple `text.lowercase().split(Regex("[\\s\\p{Punct}]+"))` is sufficient.
 - Cap the search pipeline at a ~2 second timeout. If ZIM search is slow, reduce the article count from 20 to 10.
 
 ### Verification
 
-- [ ] Can open a Wikipedia mini ZIM file and retrieve an article by title
-- [ ] Full-text search returns relevant articles for keyword queries
 - [ ] ArticleChunker produces passages of ~400-600 tokens with proper overlap
 - [ ] Chunks respect section boundaries and sentence boundaries
 - [ ] BM25 scorer ranks passages with query-term matches higher
 - [ ] Full `SearchService.search()` pipeline completes in <2 seconds
-- [ ] Write unit tests for `ArticleChunker` and `Bm25Scorer` with sample HTML input
+- [ ] Unit tests pass for `ArticleChunker` and `Bm25Scorer` with sample HTML input
+- [ ] Demo UI shows passage-level results with scores and timing
 
 ---
 
-## Section 1.3 — Inference Layer (LLM + Tool Calling)
+## Section 1.4 — Inference Layer (LLM + Tool Calling)
 
 ### Goal
 
@@ -362,7 +447,7 @@ Integrate Gemma 4 E4B via LiteRT-LM with tool calling support, so the model can 
 
 ### Requirements
 
-#### 1.3a — LlmService
+#### 1.4a — LlmService
 
 ```kotlin
 @Singleton
@@ -411,7 +496,7 @@ fun sendMessage(text: String): Flow<String> {
 }
 ```
 
-#### 1.3b — ThothTools (Tool Definitions)
+#### 1.4b — ThothTools (Tool Definitions)
 
 ```kotlin
 class ThothTools @Inject constructor(
@@ -450,7 +535,7 @@ class ThothTools @Inject constructor(
 
 **Note on `runBlocking`:** LiteRT-LM's tool calling executes tools synchronously on its internal thread. The tools must return values directly, not suspend functions. Use `runBlocking` to bridge to the suspend-based `SearchService`. This is acceptable because tool execution happens on LiteRT-LM's inference thread, not the main thread.
 
-#### 1.3c — ToolHandler (Fallback Logic)
+#### 1.4c — ToolHandler (Fallback Logic)
 
 The `ToolHandler` guards against two failure modes:
 
@@ -464,7 +549,7 @@ The `ToolHandler` guards against two failure modes:
 
 **Implementation depends on LiteRT-LM's behavior with `automaticToolCalling`:** If the framework guarantees tools are always called before a response is generated (based on the system prompt), explicit detection may not be needed. Test this empirically during implementation and add fallback logic only if the model produces ungrounded responses.
 
-#### 1.3d — System Prompt
+#### 1.4d — System Prompt
 
 ```
 You are Thoth, an offline knowledge assistant. You answer questions using Wikipedia articles stored on this device.
@@ -479,7 +564,7 @@ RULES:
 7. For follow-up questions about a topic already discussed, you may reference previously retrieved content without searching again.
 ```
 
-#### 1.3e — Context Budget
+#### 1.4e — Context Budget
 
 - Limit tool results injected into context to ~4,000 tokens total
 - This means top 5 passages of ~800 tokens each
@@ -507,7 +592,7 @@ RULES:
 
 ---
 
-## Section 1.4 — Chat UI
+## Section 1.5 — Chat UI
 
 ### Goal
 
@@ -515,7 +600,7 @@ Build the chat interface: message list with streaming responses, HTML rendering 
 
 ### Requirements
 
-#### 1.4a — Chat Data Model (UI layer)
+#### 1.5a — Chat Data Model (UI layer)
 
 ```kotlin
 enum class Role { USER, ASSISTANT }
@@ -536,7 +621,7 @@ data class Source(
 )
 ```
 
-#### 1.4b — ChatViewModel
+#### 1.5b — ChatViewModel
 
 ```kotlin
 @HiltViewModel
@@ -565,7 +650,7 @@ class ChatViewModel @Inject constructor(
 
 **Streaming UX:** Update the assistant message in `_messages` as each token arrives. Use `StateFlow` — Compose will recompose only the affected message item. Avoid updating more frequently than every ~50ms to prevent excessive recomposition (batch tokens if they arrive faster).
 
-#### 1.4c — ChatScreen
+#### 1.5c — ChatScreen
 
 ```kotlin
 @Composable
@@ -596,7 +681,7 @@ fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
 }
 ```
 
-#### 1.4d — MessageRenderer (WebView for HTML)
+#### 1.5d — MessageRenderer (WebView for HTML)
 
 Assistant responses may contain HTML formatting (tables, lists, bold/italic). Render them in a sandboxed WebView.
 
@@ -644,13 +729,13 @@ fun AssistantMessageBubble(message: ChatMessage) {
 
 **Simpler alternative:** For v1, consider rendering plain text with Compose `Text` and only using WebView for responses containing `<table>` or other complex HTML. Use Compose's `AnnotatedString` for basic bold/italic.
 
-#### 1.4e — Source Citations
+#### 1.5e — Source Citations
 
 - Extract sources from the tool call results that were used to generate the response
 - Display as Material3 `AssistChip` components below each message
 - Tapping a chip navigates to `ArticleScreen` which renders the full ZIM article HTML in a WebView
 
-#### 1.4f — ChatInputBar
+#### 1.5f — ChatInputBar
 
 - `TextField` with a send `IconButton`
 - Disabled while `isGenerating` is true
@@ -676,7 +761,7 @@ fun AssistantMessageBubble(message: ChatMessage) {
 
 ---
 
-## Section 1.5 — Setup Flow & Data Persistence
+## Section 1.6 — Setup Flow & Data Persistence
 
 ### Goal
 
@@ -684,7 +769,7 @@ Build the first-launch setup screen (file selection for model and ZIM) and Room-
 
 ### Requirements
 
-#### 1.5a — SetupScreen
+#### 1.6a — SetupScreen
 
 First-launch flow presented when model or ZIM file paths are not configured:
 
@@ -713,7 +798,7 @@ class SetupViewModel @Inject constructor(
 
 **Note:** ZIM files are large. Copying them into app-specific storage is ideal for performance (direct file I/O) but doubles storage usage temporarily. Consider allowing in-place access if the file is already on accessible storage.
 
-#### 1.5b — Room Database
+#### 1.6b — Room Database
 
 ```kotlin
 @Database(
@@ -764,7 +849,7 @@ interface ChatHistoryDao {
 }
 ```
 
-#### 1.5c — Navigation
+#### 1.6c — Navigation
 
 ```kotlin
 // NavGraph.kt
@@ -800,7 +885,7 @@ Determine start destination by checking DataStore for valid model + ZIM paths on
 
 ---
 
-## Section 1.6 — Integration Testing & Polish
+## Section 1.7 — Integration Testing & Polish
 
 ### Goal
 
