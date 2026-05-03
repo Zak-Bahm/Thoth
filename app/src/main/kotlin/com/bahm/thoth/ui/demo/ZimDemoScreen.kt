@@ -47,6 +47,7 @@ fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
     val searchResults by viewModel.searchResults.collectAsState()
     val selectedArticle by viewModel.selectedArticle.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val pipelineState by viewModel.pipelineState.collectAsState()
 
     // Request notification permission on Android 13+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -87,11 +88,13 @@ fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
                 archiveInfo = archiveInfo,
                 searchQuery = searchQuery,
                 searchResults = searchResults,
+                pipelineState = pipelineState,
                 onDownloadMini = viewModel::downloadMini,
                 onDownloadNopic = viewModel::downloadNopic,
                 onCancelDownload = viewModel::cancelDownload,
                 onSearchQueryChange = viewModel::updateSearchQuery,
                 onSearch = viewModel::search,
+                onSearchPipeline = viewModel::searchPipeline,
                 onArticleClick = viewModel::selectArticle,
                 modifier = Modifier
                     .fillMaxSize()
@@ -107,11 +110,13 @@ private fun DemoContent(
     archiveInfo: ArchiveInfo?,
     searchQuery: String,
     searchResults: List<SearchResultItem>,
+    pipelineState: PipelineSearchState,
     onDownloadMini: () -> Unit,
     onDownloadNopic: () -> Unit,
     onCancelDownload: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
+    onSearchPipeline: () -> Unit,
     onArticleClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -234,12 +239,28 @@ private fun DemoContent(
                 onClick = onSearch,
                 enabled = archiveInfo != null && searchQuery.isNotBlank(),
             ) {
-                Text("Search")
+                Text("Search (Article-level)")
+            }
+            Spacer(Modifier.height(4.dp))
+            OutlinedButton(
+                onClick = onSearchPipeline,
+                enabled = archiveInfo != null && searchQuery.isNotBlank() && !pipelineState.isSearching,
+            ) {
+                Text("Search Pipeline (Passage-level)")
             }
             Spacer(Modifier.height(8.dp))
         }
 
-        // Search results
+        // Article-level search results
+        if (searchResults.isNotEmpty()) {
+            item {
+                Text(
+                    "Article Results (${searchResults.size})",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+        }
         items(searchResults, key = { it.path }) { result ->
             Card(
                 modifier = Modifier
@@ -259,6 +280,56 @@ private fun DemoContent(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        }
+
+        // Pipeline search results
+        if (pipelineState.isSearching) {
+            item {
+                Spacer(Modifier.height(16.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(4.dp))
+                Text("Searching pipeline...", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (pipelineState.results.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Pipeline Results (${pipelineState.results.size} passages, ${pipelineState.searchTimeMs}ms)",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+            items(pipelineState.results, key = { it.passage.id }) { item ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            item.passage.articleTitle,
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (item.passage.sectionHeading != null) {
+                            Text(
+                                item.passage.sectionHeading,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            item.passage.text.take(200) + if (item.passage.text.length > 200) "..." else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }

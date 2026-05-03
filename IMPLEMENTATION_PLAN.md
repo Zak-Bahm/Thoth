@@ -341,7 +341,7 @@ Add to `AndroidManifest.xml`:
 
 ---
 
-## Section 1.3 — Article Chunking & Search Pipeline
+## Section 1.3 — Article Chunking & Search Pipeline ✅
 
 ### Goal
 
@@ -430,12 +430,12 @@ Extend the demo screen from Section 1.2 with a pipeline search tab/section:
 
 ### Verification
 
-- [ ] ArticleChunker produces passages of ~400-600 tokens with proper overlap
-- [ ] Chunks respect section boundaries and sentence boundaries
-- [ ] BM25 scorer ranks passages with query-term matches higher
-- [ ] Full `SearchService.search()` pipeline completes in <2 seconds
-- [ ] Unit tests pass for `ArticleChunker` and `Bm25Scorer` with sample HTML input
-- [ ] Demo UI shows passage-level results with scores and timing
+- [x] ArticleChunker produces passages of ~400-600 tokens with proper overlap
+- [x] Chunks respect section boundaries and sentence boundaries
+- [x] BM25 scorer ranks passages with query-term matches higher
+- [x] Full `SearchService.search()` pipeline completes in <2 seconds
+- [x] Unit tests pass for `ArticleChunker` and `Bm25Scorer` with sample HTML input
+- [x] Demo UI shows passage-level results with scores and timing
 
 ---
 

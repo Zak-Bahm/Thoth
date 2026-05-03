@@ -4,11 +4,13 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.bahm.thoth.knowledge.SearchService
 import com.bahm.thoth.knowledge.ZimDownloadForegroundService
 import com.bahm.thoth.knowledge.ZimDownloadForegroundService.DownloadState
 import com.bahm.thoth.knowledge.ZimDownloadService
 import com.bahm.thoth.knowledge.ZimRepository
 import com.bahm.thoth.knowledge.models.Article
+import com.bahm.thoth.knowledge.models.Passage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +30,17 @@ data class SearchResultItem(
     val path: String,
 )
 
+data class PipelineResultItem(
+    val passage: Passage,
+    val score: Double,
+)
+
+data class PipelineSearchState(
+    val results: List<PipelineResultItem> = emptyList(),
+    val searchTimeMs: Long = 0,
+    val isSearching: Boolean = false,
+)
+
 sealed class DownloadStatus {
     data object Idle : DownloadStatus()
     data class Downloading(val bytesDownloaded: Long, val totalBytes: Long) : DownloadStatus()
@@ -40,6 +53,7 @@ class ZimDemoViewModel @Inject constructor(
     private val application: Application,
     private val zimRepository: ZimRepository,
     private val zimDownloadService: ZimDownloadService,
+    private val searchService: SearchService,
 ) : AndroidViewModel(application) {
 
     private val _downloadStatus = MutableStateFlow<DownloadStatus>(DownloadStatus.Idle)
@@ -56,6 +70,9 @@ class ZimDemoViewModel @Inject constructor(
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _pipelineState = MutableStateFlow(PipelineSearchState())
+    val pipelineState: StateFlow<PipelineSearchState> = _pipelineState.asStateFlow()
 
     companion object {
         private const val TAG = "ZimDemoVM"
@@ -155,11 +172,32 @@ class ZimDemoViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val articles = zimRepository.searchArticles(query)
+                Log.d(TAG, "Article search(\"$query\"): ${articles.size} results")
                 _searchResults.value = articles.map { article ->
                     SearchResultItem(title = article.title, path = article.path)
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Article search failed: ${e.message}", e)
                 _searchResults.value = emptyList()
+            }
+        }
+    }
+
+    fun searchPipeline() {
+        val query = _searchQuery.value.trim()
+        if (query.isEmpty()) return
+
+        viewModelScope.launch {
+            _pipelineState.value = PipelineSearchState(isSearching = true)
+            try {
+                val result = searchService.search(query)
+                _pipelineState.value = PipelineSearchState(
+                    results = result.passages.map { PipelineResultItem(it, 0.0) },
+                    searchTimeMs = result.searchTimeMs,
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Pipeline search failed: ${e.message}", e)
+                _pipelineState.value = PipelineSearchState()
             }
         }
     }
