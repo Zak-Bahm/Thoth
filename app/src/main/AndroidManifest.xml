@@ -37,5 +37,17 @@
             android:name=".inference.ModelDownloadForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <!-- Debug/test harness: drive queries over adb. Exported so `am broadcast` from
+             the shell can reach it. Debug tooling only. -->
+        <receiver
+            android:name=".debug.DebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.bahm.thoth.DEBUG_QUERY" />
+                <action android:name="com.bahm.thoth.DEBUG_SEARCH" />
+                <action android:name="com.bahm.thoth.DEBUG_LOAD" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

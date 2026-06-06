@@ -34,6 +34,7 @@ data class ValidatedClaim(
 class ThothTools @Inject constructor(
     private val searchService: SearchService,
     private val zimRepository: ZimRepository,
+    private val perfTracker: PerfTracker,
 ) : ToolSet {
 
     companion object {
@@ -48,6 +49,7 @@ class ThothTools @Inject constructor(
         @ToolParam(description = "Technical keywords and terms (not a question). Use 3-5 specific words.")
         query: String
     ): String {
+        val startOffset = perfTracker.elapsedMs()
         callCount++
         val result = runBlocking { searchService.search(query, topK = 5) }
         val passages = result.passages.enforceBudget(MAX_CONTEXT_CHARS)
@@ -71,6 +73,21 @@ class ThothTools @Inject constructor(
             })
         }
         val jsonStr = jsonArray.toString()
+        perfTracker.recordTool(
+            name = "searchKnowledge",
+            startOffsetMs = startOffset,
+            endOffsetMs = perfTracker.elapsedMs(),
+            detail = mapOf(
+                "query" to query,
+                "zimMs" to result.zimMs,
+                "chunkMs" to result.chunkMs,
+                "bm25Ms" to result.bm25Ms,
+                "articleCount" to result.articleCount,
+                "candidatePassageCount" to result.candidatePassageCount,
+                "returnedPassages" to passages.size,
+                "contextChars" to jsonStr.length,
+            ),
+        )
         Log.d(TAG, "searchKnowledge | query=\"$query\" | ${passages.size} passages, nonces=$nonces")
         Log.d(TAG, "searchKnowledge RETURN (first 500 chars): ${jsonStr.take(500)}")
         return jsonStr
@@ -81,10 +98,21 @@ class ThothTools @Inject constructor(
         @ToolParam(description = "Exact Wikipedia article title")
         title: String
     ): String {
+        val startOffset = perfTracker.elapsedMs()
         callCount++
         Log.d(TAG, "lookupArticle | title=\"$title\"")
         val article = runBlocking { zimRepository.getArticleByTitle(title) }
         val plainText = Jsoup.parse(article?.htmlContent ?: "").text().take(16000)
+        perfTracker.recordTool(
+            name = "lookupArticle",
+            startOffsetMs = startOffset,
+            endOffsetMs = perfTracker.elapsedMs(),
+            detail = mapOf(
+                "title" to title,
+                "found" to (article != null),
+                "contentChars" to plainText.length,
+            ),
+        )
         Log.d(TAG, "lookupArticle returning ${plainText.length} chars")
         return JSONObject().apply {
             put("title", article?.title ?: "Not found")
@@ -97,6 +125,7 @@ class ThothTools @Inject constructor(
         @ToolParam(description = "One claim per line. Format: id|text. Example:\na1b2c3d4|First claim here.\ne5f6a7b8|Second claim here.")
         claims: String
     ): String {
+        val startOffset = perfTracker.elapsedMs()
         callCount++
         Log.d(TAG, "submitAnswer RAW INPUT:\n$claims")
         val parsedClaims = claims.lines()
@@ -136,6 +165,16 @@ class ThothTools @Inject constructor(
             ungroundedCount = ungrounded,
         )
 
+        perfTracker.recordTool(
+            name = "submitAnswer",
+            startOffsetMs = startOffset,
+            endOffsetMs = perfTracker.elapsedMs(),
+            detail = mapOf(
+                "claimsParsed" to parsedClaims.size,
+                "grounded" to grounded,
+                "ungrounded" to ungrounded,
+            ),
+        )
         return "accepted: $grounded/${validated.size} grounded"
     }
 }

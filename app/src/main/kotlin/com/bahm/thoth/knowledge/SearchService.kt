@@ -23,25 +23,33 @@ class SearchService @Inject constructor(
 
         // 1. Search ZIM for top matching articles
         val articles = zimRepository.searchArticles(query, maxResults = MAX_ARTICLES)
-        val zimTime = System.currentTimeMillis() - startTime
+        val afterZim = System.currentTimeMillis()
+        val zimTime = afterZim - startTime
 
         // 2. Chunk each article into passages
         val allPassages = articles.flatMap { article -> chunker.chunk(article) }
-        val chunkTime = System.currentTimeMillis() - startTime
+        val afterChunk = System.currentTimeMillis()
+        val chunkTime = afterChunk - afterZim
 
         // 3. BM25-rank all passages against query
         val ranked = bm25Scorer.score(query, allPassages)
+        val bm25Time = System.currentTimeMillis() - afterChunk
 
         // 4. Return top-K passages
         val topResults = ranked.take(topK)
         val elapsed = System.currentTimeMillis() - startTime
 
-        Log.d(TAG, "search(\"$query\"): ${articles.size} articles (${zimTime}ms) -> ${allPassages.size} passages (${chunkTime}ms) -> top-$topK ranked (${elapsed}ms total)")
+        Log.d(TAG, "search(\"$query\"): ${articles.size} articles (${zimTime}ms) -> ${allPassages.size} passages (chunk ${chunkTime}ms) -> bm25 ${bm25Time}ms -> top-$topK ranked (${elapsed}ms total)")
 
         SearchResult(
             passages = topResults.map { it.first },
             query = query,
             searchTimeMs = elapsed,
+            zimMs = zimTime,
+            chunkMs = chunkTime,
+            bm25Ms = bm25Time,
+            articleCount = articles.size,
+            candidatePassageCount = allPassages.size,
         )
     }
 }

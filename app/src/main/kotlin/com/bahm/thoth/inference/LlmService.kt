@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +30,7 @@ sealed class LlmState {
 class LlmService @Inject constructor(
     private val thothTools: ThothTools,
     private val toolHandler: ToolHandler,
+    private val perfTracker: PerfTracker,
 ) {
 
     companion object {
@@ -53,6 +53,7 @@ class LlmService @Inject constructor(
             val startTime = System.currentTimeMillis()
 
             val config = EngineConfig(modelPath)
+            Log.d(TAG, "EngineConfig maxNumTokens=${config.maxNumTokens} (null = library default)")
             val eng = Engine(config)
             eng.initialize()
 
@@ -90,46 +91,74 @@ class LlmService @Inject constructor(
         val conv = conversation ?: throw IllegalStateException("Conversation not created")
         Log.d(TAG, "sendMessage | length=${text.length}")
         toolHandler.resetForNewMessage()
+        perfTracker.startMessage(text)
 
         return flow {
             // Collect the full response (tools execute automatically during this)
-            val rawText = collectResponse(conv, text)
-
-            // Log any thinking content for debugging
-            val thinkingMatch = THINKING_PATTERN.find(rawText)
-            if (thinkingMatch != null) {
-                Log.d(TAG, "Model reasoning: ${thinkingMatch.groupValues[1].trim().take(500)}")
-            }
+            val collected = collectResponse(conv, text)
+            val rawText = collected.text
 
             // Check if submitAnswer was called (structured response available)
             val structured = toolHandler.getStructuredResponse()
+
+            // Diagnostic dump: full raw text + reasoning channels + tool-call count to
+            // debug/raw_output.jsonl, so failed/empty answers can be inspected off-device.
+            perfTracker.recordRawOutput(
+                rawText = rawText,
+                channels = collected.channels,
+                structuredCalled = structured != null,
+                streamToolCalls = collected.toolCallCount,
+            )
+
             if (structured != null) {
                 val html = toolHandler.renderToHtml(structured)
                 Log.d(TAG, "Structured response | ${structured.groundedCount}/${structured.claims.size} grounded | html length=${html.length}")
+                perfTracker.finishMessage(structured.groundedCount, structured.claims.size)
                 emit(html)
             } else {
-                // Model responded with plain text (didn't call submitAnswer) — strip thinking tokens
+                // Model produced no submitAnswer call — fall back to whatever plain text it emitted.
                 val cleanText = stripThinking(rawText)
-                Log.w(TAG, "No structured response — model did not call submitAnswer. Emitting raw text.")
-                emit(cleanText)
+                Log.w(TAG, "No structured response — model did not call submitAnswer. textLen=${rawText.length}, channels=${collected.channels.keys}")
+                perfTracker.finishMessage(0, 0)
+                emit(cleanText.ifBlank { "(no answer produced)" })
             }
         }
     }
 
-    private suspend fun collectResponse(conv: Conversation, text: String): String {
+    private data class CollectResult(
+        val text: String,
+        val channels: Map<String, String>,
+        val toolCallCount: Int,
+    )
+
+    private suspend fun collectResponse(conv: Conversation, text: String): CollectResult {
         val accumulated = StringBuilder()
+        val channels = linkedMapOf<String, StringBuilder>()
+        var streamToolCalls = 0
         conv.sendMessageAsync(text, emptyMap())
-            .map { message ->
-                message.contents.contents
+            .collect { message ->
+                val tokenText = message.contents.contents
                     .filterIsInstance<Content.Text>()
                     .joinToString("") { it.text }
-            }
-            .collect { token ->
-                accumulated.append(token)
+                if (tokenText.isNotEmpty()) {
+                    perfTracker.recordFirstToken()
+                    perfTracker.addChunk(tokenText.length)
+                    accumulated.append(tokenText)
+                }
+                // Reasoning streams via channels (not Content.Text); accumulate per channel.
+                for ((key, value) in message.channels) {
+                    if (value.isNotEmpty()) channels.getOrPut(key) { StringBuilder() }.append(value)
+                }
+                streamToolCalls += message.toolCalls.size
             }
         val result = accumulated.toString()
-        Log.d(TAG, "Response collected | length=${result.length} | toolCalls=${thothTools.callCount}")
-        return result
+        val channelsText = channels.mapValues { it.value.toString() }
+        Log.d(
+            TAG,
+            "Response collected | textLen=${result.length} | channels=${channelsText.mapValues { it.value.length }} | " +
+                "streamToolCalls=$streamToolCalls | toolCallCount=${thothTools.callCount}",
+        )
+        return CollectResult(result, channelsText, streamToolCalls)
     }
 
     private fun stripThinking(text: String): String {
