@@ -568,124 +568,164 @@ No new dependencies needed — LiteRT-LM and OkHttp are already configured.
 
 ---
 
-## Section 1.5 — Tool Calling & Cited Responses
+## Section 1.5 — Tool Calling & Cited Responses ✅
 
 ### Goal
 
-Wire the LLM to the search pipeline via LiteRT-LM's tool calling so the model can invoke `searchKnowledge` and `lookupArticle`, add a system prompt enforcing citation rules, and implement fallback logic for when the model skips search.
+Wire the LLM to the search pipeline via LiteRT-LM's tool calling so the model can invoke `searchKnowledge`, `lookupArticle`, and `submitAnswer`, add a system prompt enforcing keyword search and grounding rules, and enforce per-claim citation via a nonce-based grounding scheme.
+
+> **Note — design evolved during implementation.** The original plan used free-form `[Article Title]` text citations and a `callCount == 0` fallback for when the model skipped search. The as-built design replaces both with a stronger anti-hallucination scheme: every retrieved passage is tagged with a per-message random **nonce**, the model returns its answer through a dedicated `submitAnswer` tool as `id|claim` lines, and each claim is validated against the nonce registry. A claim can only be cited if its nonce was actually issued during this message — the model cannot fabricate a citation. This section documents the as-built design.
 
 ### Requirements
 
 #### 1.5a — ThothTools (Tool Definitions)
 
+`ThothTools` is a `@Singleton ToolSet` with three tools. Tools return **JSON strings** (not `Map`/`List`), which is what LiteRT-LM injects back into context.
+
 ```kotlin
+data class Claim(val text: String, val passageNonce: String)
+data class ValidatedClaim(val text: String, val source: PassageSource?, val isGrounded: Boolean)
+data class StructuredResponse(
+    val claims: List<ValidatedClaim>,
+    val groundedCount: Int,
+    val ungroundedCount: Int,
+)
+
+@Singleton
 class ThothTools @Inject constructor(
     private val searchService: SearchService,
     private val zimRepository: ZimRepository,
 ) : ToolSet {
 
-    var callCount: Int = 0  // Instrumentation for ToolHandler
+    var callCount: Int = 0                       // Instrumentation, reset per message
+    var lastResponse: StructuredResponse? = null // Set by submitAnswer
 
-    @Tool(description = "Search Wikipedia for articles matching a query. You MUST call this tool before answering ANY factual question. Use specific keywords, names, and technical terms.")
-    fun searchKnowledge(
-        @ToolParam(description = "Search query with specific keywords")
-        query: String
-    ): List<Map<String, String>> {
-        callCount++
-        val result = runBlocking { searchService.search(query, topK = 5) }
-        return result.passages
-            .enforceBudget(MAX_CONTEXT_CHARS)
-            .map { passage ->
-                mapOf(
-                    "title" to passage.articleTitle,
-                    "section" to (passage.sectionHeading ?: ""),
-                    "content" to passage.text,
-                )
-            }
-    }
+    // searchKnowledge: runs SearchService, applies context budget, issues a nonce
+    // per passage via NonceRegistry, returns a JSON array of {id, title, section, content}.
+    // The `id` is the nonce the model must echo back in submitAnswer.
 
-    @Tool(description = "Retrieve the full content of a specific Wikipedia article by its exact title. Use this when you need more detail from an article found via searchKnowledge.")
-    fun lookupArticle(
-        @ToolParam(description = "Exact Wikipedia article title")
-        title: String
-    ): Map<String, String> {
-        callCount++
-        val article = runBlocking { zimRepository.getArticleByTitle(title) }
-        // Strip HTML to plain text with Jsoup, truncate to ~16000 chars
-        val plainText = Jsoup.parse(article?.htmlContent ?: "").text().take(16000)
-        return mapOf(
-            "title" to (article?.title ?: "Not found"),
-            "content" to plainText.ifEmpty { "Article not found." },
-        )
-    }
+    // lookupArticle: fetches full article by title, strips HTML to plain text
+    // (Jsoup), truncates to 16000 chars, returns JSON {title, content}.
+
+    // submitAnswer: the ONLY way the model delivers a response. Input is one
+    // claim per line, "id|claim text". Each line is parsed into a Claim, then
+    // validated against NonceRegistry. Grounded/ungrounded counts are recorded
+    // in lastResponse. Returns "accepted: G/N grounded".
 }
 ```
 
-**Note on `runBlocking`:** LiteRT-LM's tool calling executes tools synchronously on its internal thread. The tools must return values directly, not suspend functions. Use `runBlocking` to bridge to the suspend-based `SearchService`. This is acceptable because tool execution happens on LiteRT-LM's inference thread, not the main thread.
+Tool descriptions instruct the model to search with **technical keywords, not questions** (e.g. "why do leaves fall" → "deciduous abscission leaf senescence"), and `submitAnswer`'s description specifies the `id|text` line format.
 
-#### 1.5b — Context Budget
+**Note on `runBlocking`:** LiteRT-LM's tool calling executes tools synchronously on its internal inference thread. Tools must return values directly, not suspend. `runBlocking` bridges to the suspend-based `SearchService`/`ZimRepository`. This is acceptable because execution happens off the main thread.
 
-- Limit tool results injected into context to ~4,000 tokens total (~16,000 characters)
-- This means top 5 passages of ~800 tokens each
-- Gemma 4 E4B has a 128K context window, but small models degrade with long contexts — attention becomes diffuse and the model may hallucinate or ignore later passages
-- If passage text exceeds the budget, drop trailing passages (keep highest-ranked)
+#### 1.5b — NonceRegistry (Grounding Anchor)
 
-#### 1.5c — System Prompt
+`NonceRegistry` is the trust anchor that prevents fabricated citations.
+
+```kotlin
+data class PassageSource(
+    val articleTitle: String,
+    val sectionHeading: String,
+    val zimEntryPath: String,
+)
+
+object NonceRegistry {
+    fun generate(source: PassageSource): String  // 4-byte SecureRandom → 8-char hex
+    fun validate(nonce: String): PassageSource?   // null if never issued this message
+    fun reset()                                   // cleared before each user message
+}
+```
+
+- `searchKnowledge` calls `generate()` for every passage it returns, mapping the nonce → source.
+- `submitAnswer` calls `validate()` per claim. A claim whose nonce isn't in the registry is flagged **ungrounded**.
+- The registry is reset per message (via `ToolHandler.resetForNewMessage()`), so nonces are short-lived and can't carry over.
+
+#### 1.5c — Context Budget
+
+`ContextBudget.kt` limits tool results injected into context.
+
+```kotlin
+const val MAX_CONTEXT_CHARS = 16_000  // ~4,000 tokens
+
+fun List<Passage>.enforceBudget(maxChars: Int = MAX_CONTEXT_CHARS): List<Passage>
+```
+
+- Accumulates passage text in rank order and drops trailing passages once the budget is exceeded (keeps highest-ranked).
+- Rationale: Gemma 4 E4B has a 128K window, but small models degrade with long contexts — attention diffuses and later passages get ignored or hallucinated.
+
+#### 1.5d — System Prompt
+
+Stored as `SystemPrompt.THOTH_SYSTEM_PROMPT`. Prefixed with `<|think|>` to enable Gemma reasoning mode (query planning / relevance evaluation before tool calls). Key rules as implemented:
 
 ```
 You are Thoth, an offline knowledge assistant. You answer questions using Wikipedia articles stored on this device.
 
 RULES:
 1. ALWAYS call searchKnowledge before answering any factual question. Never answer from memory alone.
-2. After receiving search results, synthesize a clear answer based ONLY on the retrieved content.
-3. Cite your sources: end each factual claim with [Article Title].
-4. If the search results don't contain enough information to answer, say so honestly. Never fabricate information.
-5. You may format your response using basic HTML: <b>, <i>, <table>, <ul>, <ol>, <li>, <h3>, <p>, <br>.
-6. Keep responses concise — 2-4 paragraphs maximum unless the user asks for detail.
-7. For follow-up questions about a topic already discussed, you may reference previously retrieved content without searching again.
+2. Use TECHNICAL KEYWORDS in your search queries, not natural language questions. (examples...)
+3. If search results seem irrelevant, call searchKnowledge again with different keywords. Up to 3 times.
+4. After receiving relevant results, synthesize a clear answer based ONLY on the retrieved content.
+5. You MUST call submitAnswer to deliver your response. Never respond with plain text outside of a tool call.
+6. In submitAnswer, format each claim as one line: id|claim text. The id is the 8-character hex id from the search results. Only cite passages actually relevant to the claim.
+7. You may use basic HTML in claim text: <b>, <i>, <ul>, <ol>, <li>, <p>, <br>.
+8. Keep responses concise — 2-6 claims maximum unless the user asks for detail.
+9. For follow-up questions about a topic already discussed, you may reference previously retrieved content without searching again.
 ```
 
-Store as a constant in `SystemPrompt.kt` for easy iteration.
+#### 1.5e — ToolHandler (Reset, Validation & Rendering)
 
-#### 1.5d — ToolHandler (Fallback Logic)
+`ToolHandler` is a `@Singleton` that owns per-message lifecycle and rendering rather than skip-detection.
 
-The `ToolHandler` guards against the model answering without calling tools.
+```kotlin
+@Singleton
+class ToolHandler @Inject constructor(private val thothTools: ThothTools) {
+    fun resetForNewMessage()                                   // callCount=0, lastResponse=null, NonceRegistry.reset()
+    fun getStructuredResponse(): StructuredResponse?           // thothTools.lastResponse
+    fun renderToHtml(response: StructuredResponse): String     // <p>claim <cite>[Title]</cite></p> per grounded claim
+}
+```
 
-**Detection:** Use instrumentation — `ThothTools.callCount` is reset before each user message and checked after response completes. If `callCount == 0`, the model skipped search.
+- `renderToHtml` emits one `<p>` per claim; grounded claims get a `<cite>[Article Title]</cite>` tag. Ungrounded claims are logged as warnings.
 
-**Action on skip:** Return the user's query as a fallback search query. The ViewModel can then manually call `searchKnowledge`, inject results, and re-prompt — or log a warning for tuning in Section 1.8.
+> **Skip-search fallback dropped.** The plan's `callCount == 0` re-prompt path was not implemented. With `automaticToolCalling = true` plus the mandatory `submitAnswer` contract, the failure mode shifts from "model skips search" to "model emits plain text without calling `submitAnswer`". That case is handled in `LlmService` (1.5f) by stripping thinking tokens and emitting the raw text with a warning. `callCount` remains as instrumentation/logging.
 
-**Malformed tool calls:** LiteRT-LM's constrained decoding should prevent this when tool definitions are registered. If it still occurs, catch JSON parse errors and fall back to `searchKnowledge` with extracted query terms.
+#### 1.5f — LlmService Updates
 
-**Implementation depends on LiteRT-LM's behavior with `automaticToolCalling`:** If the framework guarantees tools are always called before a response is generated (based on the system prompt), explicit detection may not be needed. Test this empirically during implementation and add fallback logic only if the model produces ungrounded responses.
+`LlmService` now takes `ThothTools` and `ToolHandler` in its constructor and configures the conversation with tools + system prompt:
 
-#### 1.5e — LlmService Updates
+```kotlin
+val conversationConfig = ConversationConfig(
+    samplerConfig = samplerConfig,
+    systemInstruction = Contents.of(SystemPrompt.THOTH_SYSTEM_PROMPT),
+    tools = listOf(tool(thothTools)),
+    automaticToolCalling = true,
+)
+```
 
-Modify `LlmService` (from Section 1.4) to wire in tools and system prompt:
+`sendMessage(text)` returns a `Flow<String>` that:
+1. Calls `toolHandler.resetForNewMessage()`.
+2. Collects the full streamed response while tools execute automatically (`collectResponse`).
+3. Logs any `<|channel>thought...` reasoning for debugging.
+4. If `submitAnswer` was called (`getStructuredResponse() != null`), renders the structured response to HTML and emits it.
+5. Otherwise emits the raw text with thinking tokens stripped, and logs a warning that the model didn't call `submitAnswer`.
 
-- Add `ThothTools` to constructor
-- Update `createConversation()`:
-  - Add `systemInstruction = Contents.of(SystemPrompt.THOTH_SYSTEM_PROMPT)`
-  - Add `tools = listOf(tool(thothTools))`
-  - Add `automaticToolCalling = true`
-- Expose `getToolCallCount()` and `resetToolCallCount()` for ToolHandler
-
-**If `automaticToolCalling` doesn't reliably force search:** Switch to `automaticToolCalling = false` and manually parse + route tool calls in `sendMessage()`.
+`getToolCallCount()` is exposed for instrumentation.
 
 ### Guidance
 
-- Test tool calling behavior early. If `automaticToolCalling` doesn't reliably force search, switch to `automaticToolCalling = false` and manually parse + route tool calls.
-- Add ProGuard keep rule for `ThothTools`: `-keep class com.bahm.thoth.inference.ThothTools { *; }` — `@Tool`/`@ToolParam` annotations use runtime reflection.
+- `automaticToolCalling = true` proved reliable enough that manual tool-call routing was not needed.
+- ProGuard/R8 is enabled for release builds (`isMinifyEnabled = true`). `proguard-rules.pro` keeps the reflection-based tool classes: `ThothTools`, `Claim`, `PassageSource` — `@Tool`/`@ToolParam` use runtime reflection.
 - Token generation speed: expect 6-12 tok/s on flagship devices (Snapdragon 8 Gen 2+), slower on mid-range. A 500-token response takes 40-80 seconds.
 
 ### Verification
 
-- [ ] Tool calling works: model generates `searchKnowledge` call, results are returned, model produces cited response
-- [ ] System prompt enforcement: model cites sources in every factual response
-- [ ] Context stays within ~4,000 token budget for retrieved passages
-- [ ] `lookupArticle` returns stripped plain text, not raw HTML
-- [ ] ToolHandler detects when model skips search
-- [ ] Error handling: meaningful errors for edge cases (no search results, article not found)
+- [x] Tool calling works: model generates `searchKnowledge` call, results are returned, model produces a `submitAnswer` response (device test)
+- [x] Grounding enforcement: claims with valid nonces render with `<cite>` tags; fabricated nonces are flagged ungrounded
+- [x] Context stays within the 16,000-char (`MAX_CONTEXT_CHARS`) budget for retrieved passages
+- [x] `lookupArticle` returns stripped plain text, not raw HTML
+- [x] Plain-text fallback: if the model skips `submitAnswer`, thinking tokens are stripped and raw text is emitted with a warning
+- [x] Error handling: meaningful behavior for edge cases (no search results, article not found)
+- [x] Release build compiles with R8 minification and the tool-class keep rules
 
 ---
 
