@@ -1,4 +1,4 @@
-package com.bahm.thoth.ui.demo
+package com.bahm.thoth.ui.settings
 
 import android.app.Application
 import android.util.Log
@@ -60,7 +60,7 @@ data class ChatMessage(
 )
 
 @HiltViewModel
-class ZimDemoViewModel @Inject constructor(
+class SettingsViewModel @Inject constructor(
     private val application: Application,
     private val zimRepository: ZimRepository,
     private val zimDownloadService: ZimDownloadService,
@@ -98,7 +98,7 @@ class ZimDemoViewModel @Inject constructor(
     // LLM state
     val llmState: StateFlow<LlmState> = llmService.state
 
-    // Chat state
+    // Chat state (in-settings test harness)
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
 
@@ -109,7 +109,7 @@ class ZimDemoViewModel @Inject constructor(
     val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
 
     companion object {
-        private const val TAG = "ZimDemoVM"
+        private const val TAG = "SettingsVM"
         private const val BASE_URL = "https://download.kiwix.org/zim/wikipedia/"
         const val MINI_FILENAME = "wikipedia_en_all_mini_2026-03.zim"
         const val NOPIC_FILENAME = "wikipedia_en_all_nopic_2026-03.zim"
@@ -128,6 +128,12 @@ class ZimDemoViewModel @Inject constructor(
     // --- ZIM download ---
 
     private fun checkExistingFiles() {
+        // If another screen (e.g. Home) already opened the archive, just read its info
+        // rather than reopening the (potentially 48 GB) file.
+        if (zimRepository.isOpen()) {
+            populateArchiveInfo()
+            return
+        }
         val miniFile = zimDownloadService.getDownloadedFile(MINI_FILENAME)
         val nopicFile = zimDownloadService.getDownloadedFile(NOPIC_FILENAME)
         Log.d(TAG, "checkExistingFiles: mini=${miniFile?.absolutePath}, nopic=${nopicFile?.absolutePath}")
@@ -135,6 +141,15 @@ class ZimDemoViewModel @Inject constructor(
         if (existingFile != null) {
             openArchive(existingFile.absolutePath)
         }
+    }
+
+    private fun populateArchiveInfo() {
+        _archiveInfo.value = ArchiveInfo(
+            filename = zimRepository.getFilename() ?: "Unknown",
+            articleCount = zimRepository.getArticleCount(),
+            allEntryCount = zimRepository.getAllEntryCount(),
+            hasFulltextIndex = zimRepository.hasFulltextIndex(),
+        )
     }
 
     private fun observeDownloadProgress() {
@@ -187,14 +202,8 @@ class ZimDemoViewModel @Inject constructor(
             try {
                 zimRepository.open(path)
                 Log.d(TAG, "Archive opened, reading info...")
-                val info = ArchiveInfo(
-                    filename = zimRepository.getFilename() ?: "Unknown",
-                    articleCount = zimRepository.getArticleCount(),
-                    allEntryCount = zimRepository.getAllEntryCount(),
-                    hasFulltextIndex = zimRepository.hasFulltextIndex(),
-                )
-                Log.d(TAG, "Archive info: $info")
-                _archiveInfo.value = info
+                populateArchiveInfo()
+                Log.d(TAG, "Archive info: ${_archiveInfo.value}")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to open archive: ${e.message}", e)
                 _downloadStatus.value = DownloadStatus.Error("Failed to open archive: ${e.message}")
@@ -374,11 +383,7 @@ class ZimDemoViewModel @Inject constructor(
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        llmService.release()
-        viewModelScope.launch {
-            zimRepository.close()
-        }
-    }
+    // NOTE: model/ZIM are app-session singletons and intentionally NOT released in
+    // onCleared() — releasing here would tear down the model/archive when navigating
+    // away from Settings. Release is explicit (releaseModel) or on process death.
 }

@@ -138,6 +138,17 @@ class LlmService @Inject constructor(
 
     fun getToolCallCount(): Int = thothTools.callCount
 
+    /**
+     * Grounded sources from the most recent [sendMessage] response, deduplicated by
+     * ZIM entry path. Empty when the model produced plain text (no submitAnswer call).
+     */
+    fun getLastSources(): List<PassageSource> {
+        val structured = toolHandler.getStructuredResponse() ?: return emptyList()
+        return structured.claims
+            .mapNotNull { if (it.isGrounded) it.source else null }
+            .distinctBy { it.zimEntryPath }
+    }
+
     fun resetConversation() {
         conversation?.close()
         conversation = null

@@ -729,11 +729,27 @@ val conversationConfig = ConversationConfig(
 
 ---
 
-## Section 1.6 — Chat UI
+## Section 1.6 — Chat UI ✅
 
 ### Goal
 
-Build the chat interface: message list with streaming responses, HTML rendering via WebView, source citation chips, and a text input bar.
+Build the chat interface: message list with responses, HTML rendering via WebView, source citation chips, and a text input bar.
+
+> **Note — as-built.** Implemented as `ui/chat/` (`ChatModels`, `ChatViewModel`, `ChatScreen`,
+> `MessageRenderer`), `ui/article/ArticleScreen`+`ArticleViewModel`, and `ui/navigation/NavGraph`.
+> Three deviations, all confirmed with the user and device-verified:
+> - **No token-by-token streaming.** `LlmService.sendMessage()` emits one complete validated
+>   HTML answer per message (it streams tokens internally but only the final `submitAnswer`
+>   render is user-presentable). The UI shows a spinner + "thinking…" while generating, then the
+>   full answer. `LlmService.getLastSources()` was added to surface deduplicated grounded sources
+>   for chips.
+> - **Entry point is the demo screen.** `NavGraph` start destination is `demo`; an "Open Chat UI"
+>   button launches chat. `ChatScreen` gates on `LlmState.Ready`. The real setup flow is 1.7.
+> - **Article viewer is intentionally basic** (raw ZIM HTML in a sandboxed WebView). Internal
+>   links, article CSS/theme, math formulas, and images do **not** resolve because the HTML is
+>   loaded standalone with no base URL and network blocked. The proper fix (serve ZIM resources
+>   via `WebViewClient.shouldInterceptRequest` + `ZimRepository.getResource()`, or libkiwix's
+>   `Server`/kiwix-serve) is **deferred to Section 1.7** — see 1.7d.
 
 ### Requirements
 
@@ -887,14 +903,14 @@ fun AssistantMessageBubble(message: ChatMessage) {
 
 ### Verification
 
-- [ ] User can type a message and see it appear in the chat
-- [ ] Assistant response streams in token-by-token
-- [ ] HTML content renders correctly in WebView (tables, lists, bold)
-- [ ] Source citation chips appear below assistant messages
-- [ ] Tapping a source chip shows the full article
-- [ ] Input is disabled during generation
-- [ ] Chat scrolls to newest message automatically
-- [ ] UI is responsive — no jank during token streaming
+- [x] User can type a message and see it appear in the chat
+- [x] Assistant response appears after generation, with a "thinking…" spinner while generating (single-emission, not token-by-token — see note)
+- [x] HTML content renders correctly in WebView (paragraphs, bold/italic, lists, `<cite>`)
+- [x] Source citation chips appear below assistant messages (deduplicated by source article)
+- [x] Tapping a source chip shows the source article (basic render — rich viewer deferred to 1.7d)
+- [x] Input is disabled during generation
+- [x] Chat scrolls to newest message automatically (`reverseLayout = true`)
+- [x] UI is responsive — no jank
 
 ---
 
@@ -1003,6 +1019,29 @@ fun ThothNavGraph(navController: NavHostController) {
 
 Determine start destination by checking DataStore for valid model + ZIM paths on app launch.
 
+#### 1.7d — Proper ZIM Article Viewer (deferred from 1.6)
+
+Section 1.6 ships a basic `ArticleScreen` that loads a single ZIM article's raw HTML standalone
+(`loadDataWithBaseURL(null, …)`, network blocked). That HTML references other ZIM entries for its
+stylesheet, images, math resources, and internal links, so none of those resolve — internal links
+are dead, the article's theme/CSS is missing, math formulas (SVG/MathML) and images don't render.
+
+Replace it with proper ZIM resource serving. Two viable approaches:
+
+1. **`WebViewClient.shouldInterceptRequest`** — intercept each WebView request and resolve the
+   path against the open `Archive` via a new `ZimRepository.getResource(path): ByteArray + mimeType`,
+   returning a `WebResourceResponse`. Internal links then navigate within the WebView and the
+   interceptor serves the target article; images/formulas/CSS come from the archive. Inject a
+   dark-theme CSS to match the app. Lighter; reuses the existing `ZimRepository`.
+2. **libkiwix `Server` (kiwix-serve)** — start libkiwix's bundled HTTP server and point the WebView
+   at `http://localhost:<port>/…`. This is the real Kiwix viewer, so links, native theme, math,
+   images, and in-article search all work for free. Heavier (server + book/library lifecycle,
+   threading); verify the `Server` class is present in `org.kiwix:libkiwix:2.5.0`.
+
+**Images:** for the image ZIM (mini pack) images live *in the archive* and are served by either
+approach above. Fetching from the internet is offline-first-violating and should at most be a
+separate opt-in fallback, not the default.
+
 ### Guidance
 
 - Use Kotlin serialization (`kotlinx.serialization.json`) for `sourcesJson` in Room entities rather than hand-rolling JSON.
@@ -1017,6 +1056,7 @@ Determine start destination by checking DataStore for valid model + ZIM paths on
 - [ ] Invalid files show appropriate error messages
 - [ ] Model loading shows progress and completes successfully
 - [ ] Subsequent launches skip setup and go to chat
+- [ ] Article viewer (1.7d): internal links navigate, article CSS/theme + math formulas + images render from the ZIM
 - [ ] Chat messages persist across app restarts
 - [ ] Conversation data can be retrieved from Room
 

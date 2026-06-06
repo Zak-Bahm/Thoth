@@ -1,4 +1,4 @@
-package com.bahm.thoth.ui.demo
+package com.bahm.thoth.ui.settings
 
 import android.Manifest
 import android.os.Build
@@ -48,7 +48,10 @@ import com.bahm.thoth.inference.LlmState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val downloadStatus by viewModel.downloadStatus.collectAsState()
     val archiveInfo by viewModel.archiveInfo.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
@@ -76,12 +79,18 @@ fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Thoth - ZIM Demo") },
+                title = { Text(if (selectedArticle != null) "Article" else "Settings") },
                 navigationIcon = {
-                    if (selectedArticle != null) {
-                        IconButton(onClick = { viewModel.clearSelectedArticle() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
+                    IconButton(
+                        onClick = {
+                            if (selectedArticle != null) {
+                                viewModel.clearSelectedArticle()
+                            } else {
+                                onNavigateBack()
+                            }
+                        },
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
             )
@@ -96,7 +105,7 @@ fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
                     .padding(innerPadding),
             )
         } else {
-            DemoContent(
+            SettingsContent(
                 downloadStatus = downloadStatus,
                 archiveInfo = archiveInfo,
                 searchQuery = searchQuery,
@@ -131,7 +140,7 @@ fun ZimDemoScreen(viewModel: ZimDemoViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun DemoContent(
+private fun SettingsContent(
     downloadStatus: DownloadStatus,
     archiveInfo: ArchiveInfo?,
     searchQuery: String,
@@ -160,9 +169,9 @@ private fun DemoContent(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier = modifier.padding(horizontal = 16.dp)) {
-        // Download section
+        // Knowledge (ZIM) section
         item {
-            Text("Download", style = MaterialTheme.typography.titleMedium)
+            Text("Knowledge Pack", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
 
             when (downloadStatus) {
@@ -261,9 +270,9 @@ private fun DemoContent(
             Spacer(Modifier.height(16.dp))
         }
 
-        // Search section
+        // Search testing section
         item {
-            Text("Search", style = MaterialTheme.typography.titleMedium)
+            Text("Search Testing", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
 
             OutlinedTextField(
@@ -373,7 +382,7 @@ private fun DemoContent(
             }
         }
 
-        // Model Download section
+        // Model section
         item {
             Spacer(Modifier.height(16.dp))
             HorizontalDivider()
@@ -440,11 +449,9 @@ private fun DemoContent(
             }
         }
 
-        // Model Loading section
+        // Model loading section
         if (modelFileExists) {
             item {
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
                 Text("Model Loading", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
@@ -497,7 +504,7 @@ private fun DemoContent(
             }
         }
 
-        // Basic Chat section
+        // Chat testing section
         if (llmState is LlmState.Ready) {
             item {
                 Spacer(Modifier.height(16.dp))
@@ -508,7 +515,7 @@ private fun DemoContent(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Chat",
+                        "Chat Testing",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )

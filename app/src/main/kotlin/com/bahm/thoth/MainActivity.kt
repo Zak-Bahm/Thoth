@@ -4,7 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.bahm.thoth.ui.demo.ZimDemoScreen
+import androidx.navigation.compose.rememberNavController
+import com.bahm.thoth.ui.navigation.ThothNavGraph
 import com.bahm.thoth.ui.theme.ThothTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -15,7 +16,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ThothTheme {
-                ZimDemoScreen()
+                val navController = rememberNavController()
+                ThothNavGraph(navController)
             }
         }
     }
