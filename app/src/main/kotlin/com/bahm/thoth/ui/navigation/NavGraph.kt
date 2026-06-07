@@ -14,11 +14,15 @@ import com.bahm.thoth.ui.settings.SettingsScreen
 
 object Routes {
     const val HOME = "home"
-    const val CHAT = "chat"
+    const val CHAT = "chat?q={q}"
     const val SETTINGS = "settings"
     const val ARTICLE = "article/{zimPath}"
 
     fun article(zimEntryPath: String): String = "article/${Uri.encode(zimEntryPath)}"
+
+    /** Open the detailed chat, optionally pre-running a question handed off from Home. */
+    fun chat(query: String? = null): String =
+        if (query.isNullOrBlank()) "chat" else "chat?q=${Uri.encode(query)}"
 }
 
 @Composable
@@ -26,16 +30,29 @@ fun ThothNavGraph(navController: NavHostController) {
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(
-                onStartChat = { navController.navigate(Routes.CHAT) },
+                onSearchDetail = { query -> navController.navigate(Routes.chat(query)) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenArticle = { zimEntryPath ->
+                    navController.navigate(Routes.article(zimEntryPath))
+                },
             )
         }
-        composable(Routes.CHAT) {
+        composable(
+            route = Routes.CHAT,
+            arguments = listOf(
+                navArgument("q") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { backStackEntry ->
             ChatScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onOpenArticle = { zimEntryPath ->
                     navController.navigate(Routes.article(zimEntryPath))
                 },
+                initialQuery = backStackEntry.arguments?.getString("q"),
             )
         }
         composable(Routes.SETTINGS) {

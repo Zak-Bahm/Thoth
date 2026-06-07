@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +43,7 @@ import com.bahm.thoth.inference.LlmState
 fun ChatScreen(
     onNavigateBack: () -> Unit,
     onOpenArticle: (zimEntryPath: String) -> Unit,
+    initialQuery: String? = null,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -49,6 +51,15 @@ fun ChatScreen(
     val llmState by viewModel.llmState.collectAsState()
     var input by rememberSaveable { mutableStateOf("") }
     val ready = llmState is LlmState.Ready
+
+    // Auto-run the question handed off from Home's "Search in detail" (once, when ready).
+    var detailLaunched by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(initialQuery, ready) {
+        if (!detailLaunched && ready && !initialQuery.isNullOrBlank()) {
+            detailLaunched = true
+            viewModel.sendMessage(initialQuery)
+        }
+    }
 
     Scaffold(
         topBar = {

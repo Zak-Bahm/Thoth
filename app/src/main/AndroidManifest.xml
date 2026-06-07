@@ -45,6 +45,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.bahm.thoth.DEBUG_QUERY" />
+                <action android:name="com.bahm.thoth.DEBUG_QUERY_QUICK" />
                 <action android:name="com.bahm.thoth.DEBUG_SEARCH" />
                 <action android:name="com.bahm.thoth.DEBUG_LOAD" />
             </intent-filter>

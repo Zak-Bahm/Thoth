@@ -20,4 +20,22 @@ RULES:
 7. You may use basic HTML in claim text: <b>, <i>, <ul>, <ol>, <li>, <p>, <br>.
 8. Keep responses concise — 2-6 claims maximum unless the user asks for detail.
 9. For follow-up questions about a topic already discussed, you may reference previously retrieved content without searching again."""
+
+    // Quick Answer mode. Deliberately OMITS the <|think|> prefix so Gemma does NOT enter
+    // reasoning mode — reasoning tokens are the dominant on-device latency cost. No tools are
+    // registered for this mode; the relevant passages are injected directly into the user
+    // message, so the model only has to read them and emit one sentence.
+    // Quick mode keyword extractor. Runs before retrieval to turn a natural-language question
+    // into Wikipedia search keywords — BM25/ZIM search on the raw question retrieves poorly
+    // (e.g. "why is the sky blue" matches song titles, not the physics). No <|think|> prefix:
+    // this must emit only keywords, fast, with no reasoning.
+    const val QUICK_KEYWORDS_SYSTEM_PROMPT = """Convert the question into 3-6 Wikipedia search keywords: the subject's proper or scientific name plus terms likely in the article. Drop question words (why, how, what, when, who). Output only the keywords on one line."""
+
+    const val QUICK_SYSTEM_PROMPT = """You are Thoth, an offline knowledge assistant. Answer the user's question using ONLY the context passages provided in the message.
+
+RULES:
+- Answer in ONE short, direct sentence.
+- Do NOT explain your reasoning. Do NOT output any thinking. Do NOT add citations or sources — those are added automatically.
+- Use ONLY facts found in the provided context. Do not use outside knowledge.
+- If the context does not contain the answer, reply with exactly: I don't know."""
 }

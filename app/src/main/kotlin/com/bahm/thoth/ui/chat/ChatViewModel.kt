@@ -3,6 +3,7 @@ package com.bahm.thoth.ui.chat
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bahm.thoth.inference.AnswerMode
 import com.bahm.thoth.inference.LlmService
 import com.bahm.thoth.inference.LlmState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,12 +43,12 @@ class ChatViewModel @Inject constructor(
         val userMessage = ChatMessage(role = Role.USER, content = trimmed)
         val assistantMessage = ChatMessage(role = Role.ASSISTANT, content = "", isGenerating = true)
         _messages.value = _messages.value + userMessage + assistantMessage
-        Log.d(TAG, "sendMessage | \"${trimmed.take(60)}\"")
+        Log.d(TAG, "sendMessage (thorough) | \"${trimmed.take(60)}\"")
 
         viewModelScope.launch {
             var responseHtml = ""
             try {
-                llmService.sendMessage(trimmed)
+                llmService.sendMessage(trimmed, AnswerMode.THOROUGH)
                     .catch { e ->
                         Log.e(TAG, "Generation error: ${e.message}", e)
                         responseHtml = "<p>Error: ${e.message}</p>"
@@ -60,7 +61,7 @@ class ChatViewModel @Inject constructor(
                 val sources = llmService.getLastSources().map {
                     Source(articleTitle = it.articleTitle, zimEntryPath = it.zimEntryPath)
                 }
-                Log.d(TAG, "response complete | htmlLength=${responseHtml.length} | sources=${sources.size}")
+                Log.d(TAG, "thorough response complete | htmlLength=${responseHtml.length} | sources=${sources.size}")
                 finishAssistantMessage(assistantMessage.id, responseHtml, sources)
                 _isGenerating.value = false
             }

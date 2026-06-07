@@ -2,6 +2,7 @@ package com.bahm.thoth.debug
 
 import android.content.Context
 import android.util.Log
+import com.bahm.thoth.inference.AnswerMode
 import com.bahm.thoth.inference.LlmService
 import com.bahm.thoth.inference.ModelDownloadService
 import com.bahm.thoth.inference.ToolHandler
@@ -54,6 +55,7 @@ class DebugController @Inject constructor(
     companion object {
         private const val TAG = "DebugController"
         const val ACTION_QUERY = "com.bahm.thoth.DEBUG_QUERY"
+        const val ACTION_QUERY_QUICK = "com.bahm.thoth.DEBUG_QUERY_QUICK"
         const val ACTION_SEARCH = "com.bahm.thoth.DEBUG_SEARCH"
         const val ACTION_LOAD = "com.bahm.thoth.DEBUG_LOAD"
         private const val MINI_FILENAME = "wikipedia_en_all_mini_2026-03.zim"
@@ -98,10 +100,11 @@ class DebugController @Inject constructor(
                 }
             }
 
-            ACTION_QUERY -> {
+            ACTION_QUERY, ACTION_QUERY_QUICK -> {
+                val mode = if (action == ACTION_QUERY_QUICK) AnswerMode.QUICK else AnswerMode.THOROUGH
                 val q = query?.trim().orEmpty()
                 if (q.isEmpty()) {
-                    Log.w(TAG, "DEBUG_QUERY with empty 'q' — ignoring")
+                    Log.w(TAG, "$action with empty 'q' — ignoring")
                     return
                 }
                 if (!busy.compareAndSet(false, true)) {
@@ -119,9 +122,9 @@ class DebugController @Inject constructor(
                         // Independent tests: start each query from a clean conversation so
                         // prior turns' context can't contaminate this one.
                         llmService.resetConversation()
-                        Log.d(TAG, "DEBUG_QUERY running (fresh conversation): \"$q\"")
+                        Log.d(TAG, "$action running ($mode, fresh conversation): \"$q\"")
                         var response = ""
-                        llmService.sendMessage(q)
+                        llmService.sendMessage(q, mode)
                             .catch { e -> response = "ERROR: ${e.message}" }
                             .collect { response = it }
                         val s = toolHandler.getStructuredResponse()

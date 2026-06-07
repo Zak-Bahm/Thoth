@@ -1,6 +1,8 @@
 package com.bahm.thoth.inference
 
 import android.util.Log
+import com.bahm.thoth.knowledge.SearchService
+import com.bahm.thoth.knowledge.models.Passage
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -31,6 +33,7 @@ class LlmService @Inject constructor(
     private val thothTools: ThothTools,
     private val toolHandler: ToolHandler,
     private val perfTracker: PerfTracker,
+    private val searchService: SearchService,
 ) {
 
     companion object {
@@ -46,10 +49,23 @@ class LlmService @Inject constructor(
         // Below this, a no-submitAnswer plain-text response is treated as a degenerate
         // miss and replaced with a friendly message instead of a truncated fragment.
         private const val MIN_PLAIN_TEXT_CHARS = 40
+
+        // Quick Answer mode: how many top passages to inject, and the per-passage char cap.
+        // Kept small so the single prefill stays cheap (~1800 chars / ~450 tokens at top-3).
+        // top-3 (vs 2) measurably improves recall — the answer often ranks just below the top
+        // couple of BM25 hits — while generation (one sentence) stays the same length.
+        private const val QUICK_TOP_K = 3
+        private const val QUICK_PASSAGE_CHARS = 600
+
+        private const val QUICK_MISS_HTML =
+            "<p>I couldn't find a quick answer to that. Try a detailed search.</p>"
     }
 
     private var engine: Engine? = null
     private var conversation: Conversation? = null
+    // Separate, tool-free conversation for Quick Answer mode (recreated per message so its
+    // prefill stays minimal and prior turns don't accumulate).
+    private var quickConversation: Conversation? = null
 
     private val _state = MutableStateFlow<LlmState>(LlmState.Uninitialized)
     val state: StateFlow<LlmState> = _state.asStateFlow()
@@ -97,9 +113,45 @@ class LlmService @Inject constructor(
         Log.d(TAG, "Conversation created with system prompt and tools registered (automaticToolCalling=true)")
     }
 
-    fun sendMessage(text: String): Flow<String> {
+    /**
+     * Fresh, tool-free conversation for one Quick Answer turn. No tools and
+     * automaticToolCalling=false mean no agentic loop runs; lower temperature keeps the single
+     * sentence terse and deterministic. Recreated per message so prefill stays minimal.
+     */
+    private fun createQuickConversation(): Conversation {
+        quickConversation?.close()
+        return createScratchConversation(SystemPrompt.QUICK_SYSTEM_PROMPT).also {
+            quickConversation = it
+            Log.d(TAG, "Quick conversation created (no tools, automaticToolCalling=false)")
+        }
+    }
+
+    /** A throwaway tool-free, no-reasoning conversation for a single short generation. */
+    private fun createScratchConversation(systemPrompt: String): Conversation {
+        val eng = engine ?: throw IllegalStateException("Engine not initialized")
+        val samplerConfig = SamplerConfig(
+            /* topK = */ 40,
+            /* topP = */ 0.95,
+            /* temperature = */ 0.3,
+            /* seed = */ 0,
+        )
+        val conversationConfig = ConversationConfig(
+            samplerConfig = samplerConfig,
+            systemInstruction = Contents.of(systemPrompt),
+            tools = emptyList(),
+            automaticToolCalling = false,
+        )
+        return eng.createConversation(conversationConfig)
+    }
+
+    fun sendMessage(text: String, mode: AnswerMode = AnswerMode.QUICK): Flow<String> = when (mode) {
+        AnswerMode.QUICK -> sendQuickMessage(text)
+        AnswerMode.THOROUGH -> sendThoroughMessage(text)
+    }
+
+    private fun sendThoroughMessage(text: String): Flow<String> {
         val conv = conversation ?: throw IllegalStateException("Conversation not created")
-        Log.d(TAG, "sendMessage | length=${text.length}")
+        Log.d(TAG, "sendThoroughMessage | length=${text.length}")
         toolHandler.resetForNewMessage()
         perfTracker.startMessage(text)
 
@@ -139,6 +191,173 @@ class LlmService @Inject constructor(
                 emit(out)
             }
         }
+    }
+
+    /**
+     * Quick Answer mode: retrieve in code, inject the top passages into one prompt, and run a
+     * single tool-free, no-reasoning generation. Collapses the agentic two-pass loop into one
+     * short generation. Grounding is done post-hoc against the top passage we fed the model.
+     */
+    private fun sendQuickMessage(text: String): Flow<String> {
+        Log.d(TAG, "sendQuickMessage | length=${text.length}")
+        toolHandler.resetForNewMessage()
+        perfTracker.startMessage(text)
+
+        return flow {
+            val conv = createQuickConversation()
+
+            // 1. Turn the question into Wikipedia keywords first — searching the raw
+            // natural-language question retrieves poorly (matches titles like songs, not the
+            // subject). This mirrors what the agentic thorough path does before searching.
+            val kwStart = perfTracker.elapsedMs()
+            val keywords = extractKeywords(text)
+            perfTracker.recordTool(
+                name = "quickKeywords",
+                startOffsetMs = kwStart,
+                endOffsetMs = perfTracker.elapsedMs(),
+                detail = mapOf("query" to text, "keywords" to keywords),
+            )
+
+            // 2. Retrieve directly (fast, deterministic) — no searchKnowledge tool round-trip.
+            val retrieveStart = perfTracker.elapsedMs()
+            val result = searchService.search(keywords, topK = QUICK_TOP_K)
+            val passages = result.passages.take(QUICK_TOP_K)
+            perfTracker.recordTool(
+                name = "quickRetrieve",
+                startOffsetMs = retrieveStart,
+                endOffsetMs = perfTracker.elapsedMs(),
+                detail = mapOf(
+                    "query" to keywords,
+                    "zimMs" to result.zimMs,
+                    "chunkMs" to result.chunkMs,
+                    "bm25Ms" to result.bm25Ms,
+                    "articleCount" to result.articleCount,
+                    "candidatePassageCount" to result.candidatePassageCount,
+                    "returnedPassages" to passages.size,
+                ),
+            )
+
+            if (passages.isEmpty()) {
+                Log.w(TAG, "Quick: no passages retrieved for \"$text\"")
+                perfTracker.recordRawOutput("", emptyMap(), structuredCalled = false, streamToolCalls = 0)
+                perfTracker.finishMessage(0, 0)
+                emit(QUICK_MISS_HTML)
+                return@flow
+            }
+
+            // 3. One generation pass over the injected context.
+            val prompt = buildQuickPrompt(text, passages)
+            val collected = collectResponse(conv, prompt)
+            val answer = stripThinking(collected.text).trim()
+            perfTracker.recordRawOutput(
+                rawText = collected.text,
+                channels = collected.channels,
+                structuredCalled = false,
+                streamToolCalls = collected.toolCallCount,
+            )
+
+            // 4. Ground post-hoc: the top passage IS the citation.
+            val normalized = answer.trimEnd('.', '!', '?', ' ').lowercase()
+            val isMiss = answer.isBlank() ||
+                normalized.startsWith("i don't know") ||
+                normalized.startsWith("i dont know")
+            if (isMiss) {
+                Log.d(TAG, "Quick: miss (answerLen=${answer.length})")
+                perfTracker.finishMessage(0, 0)
+                emit(QUICK_MISS_HTML)
+            } else {
+                // Attribute the claim to the passage the answer actually drew from (most term
+                // overlap), not blindly to the top-ranked one — the answer often comes from a
+                // lower-ranked passage.
+                val src = pickSourcePassage(answer, passages)
+                val topSource = PassageSource(
+                    articleTitle = src.articleTitle,
+                    sectionHeading = src.sectionHeading ?: "",
+                    zimEntryPath = src.zimEntryPath,
+                )
+                val structured = StructuredResponse(
+                    claims = listOf(ValidatedClaim(text = answer, source = topSource, isGrounded = true)),
+                    groundedCount = 1,
+                    ungroundedCount = 0,
+                )
+                toolHandler.setQuickResponse(structured)
+                val html = toolHandler.renderToHtml(structured)
+                Log.d(TAG, "Quick: answer grounded to \"${topSource.articleTitle}\" | chars=${answer.length}")
+                perfTracker.finishMessage(1, 1)
+                emit(html)
+            }
+        }
+    }
+
+    /**
+     * Pick which injected passage a Quick answer drew from, by content-word overlap with the
+     * answer. Falls back to the top-ranked passage when there's no clear signal.
+     */
+    private fun pickSourcePassage(answer: String, passages: List<Passage>): Passage {
+        val answerTerms = quickTokens(answer)
+        if (answerTerms.isEmpty()) return passages[0]
+        return passages.maxByOrNull { p ->
+            val passageTerms = quickTokens(p.text).toSet()
+            answerTerms.count { it in passageTerms }
+        } ?: passages[0]
+    }
+
+    // Lowercase content words of length >= 4 (cheaply skips most stopwords) for overlap scoring.
+    private fun quickTokens(text: String): List<String> =
+        text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length >= 4 }
+
+    /**
+     * Run a quick keyword-extraction generation to convert the question into Wikipedia search
+     * terms. Falls back to the raw question if the model returns nothing usable.
+     */
+    private suspend fun extractKeywords(question: String): String {
+        val conv = createScratchConversation(SystemPrompt.QUICK_KEYWORDS_SYSTEM_PROMPT)
+        try {
+            val raw = generateFirstLine(conv, question)
+            var kw = stripThinking(raw)
+                .lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+            // Defend against the model echoing the few-shot "question -> keywords" format.
+            if (kw.contains("->")) kw = kw.substringAfterLast("->").trim()
+            kw = kw.trim('"', '\'', '.', ' ').take(120)
+            Log.d(TAG, "Quick keywords: \"$question\" -> \"$kw\" (rawLen=${raw.length})")
+            return kw.ifBlank { question }
+        } finally {
+            conv.close()
+        }
+    }
+
+    /**
+     * Collect text only until the first line is complete, then stop — cancelling the flow stops
+     * generation. Used for the keyword pass, where the model otherwise rambles past the one line
+     * we keep, wasting decode time.
+     */
+    private suspend fun generateFirstLine(conv: Conversation, text: String): String {
+        val sb = StringBuilder()
+        try {
+            conv.sendMessageAsync(text, emptyMap()).collect { message ->
+                message.contents.contents
+                    .filterIsInstance<Content.Text>()
+                    .forEach { sb.append(it.text) }
+                if (sb.indexOf("\n") >= 0) throw FirstLineComplete
+            }
+        } catch (_: FirstLineComplete) {
+            // Expected: we have the first line, stop decoding the rest.
+        }
+        return sb.toString()
+    }
+
+    private object FirstLineComplete : Exception()
+
+    private fun buildQuickPrompt(question: String, passages: List<Passage>): String {
+        val sb = StringBuilder("Context:\n")
+        passages.forEachIndexed { i, p ->
+            sb.append("[${i + 1}] ${p.articleTitle}: ${p.text.take(QUICK_PASSAGE_CHARS)}\n")
+        }
+        sb.append("\nQuestion: ").append(question)
+        return sb.toString()
     }
 
     private data class CollectResult(
@@ -197,6 +416,8 @@ class LlmService @Inject constructor(
     fun resetConversation() {
         conversation?.close()
         conversation = null
+        quickConversation?.close()
+        quickConversation = null
         createConversation()
     }
 
@@ -204,6 +425,8 @@ class LlmService @Inject constructor(
         Log.d(TAG, "Releasing resources")
         conversation?.close()
         conversation = null
+        quickConversation?.close()
+        quickConversation = null
         engine?.close()
         engine = null
         _state.value = LlmState.Uninitialized

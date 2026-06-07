@@ -22,6 +22,15 @@ class ToolHandler @Inject constructor(
 
     fun getStructuredResponse(): StructuredResponse? = thothTools.lastResponse
 
+    /**
+     * Quick Answer mode bypasses the submitAnswer tool, so it sets the structured response
+     * directly. Routing through the same [ThothTools.lastResponse] field means
+     * [getStructuredResponse] / getLastSources and the debug harness work unchanged.
+     */
+    fun setQuickResponse(response: StructuredResponse) {
+        thothTools.lastResponse = response
+    }
+
     fun renderToHtml(response: StructuredResponse): String {
         val sb = StringBuilder()
         for (claim in response.claims) {
