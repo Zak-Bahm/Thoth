@@ -38,9 +38,10 @@ class LlmService @Inject constructor(
         private val THINKING_PATTERN = Regex("""<\|channel>thought\s*\n?(.*?)<channel\|>""", RegexOption.DOT_MATCHES_ALL)
 
         // Total token budget for the engine. Set explicitly (vs. the library default) so a
-        // single turn — system prompt + up to ~3 searches' results + reasoning + answer —
-        // doesn't truncate before the model calls submitAnswer.
-        private const val MAX_NUM_TOKENS = 4096
+        // single turn — system prompt + search results + a lookupArticle + reasoning + answer
+        // — fits without truncating before the model calls submitAnswer. 8192 leaves room for
+        // a trimmed lookupArticle (see ThothTools.LOOKUP_MAX_CHARS) on top of search context.
+        private const val MAX_NUM_TOKENS = 8192
 
         // Below this, a no-submitAnswer plain-text response is treated as a degenerate
         // miss and replaced with a friendly message instead of a truncated fragment.

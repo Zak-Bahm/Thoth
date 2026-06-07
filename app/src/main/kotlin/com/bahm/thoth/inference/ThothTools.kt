@@ -39,6 +39,11 @@ class ThothTools @Inject constructor(
 
     companion object {
         private const val TAG = "ThothTools"
+
+        // lookupArticle returns plain text capped at this many chars. Kept well under the
+        // engine token budget (LlmService.MAX_NUM_TOKENS) so a lookup on top of search
+        // results + reasoning doesn't overflow the context and break answer generation.
+        private const val LOOKUP_MAX_CHARS = 6000
     }
 
     var callCount: Int = 0
@@ -102,7 +107,7 @@ class ThothTools @Inject constructor(
         callCount++
         Log.d(TAG, "lookupArticle | title=\"$title\"")
         val article = runBlocking { zimRepository.getArticleByTitle(title) }
-        val plainText = Jsoup.parse(article?.htmlContent ?: "").text().take(16000)
+        val plainText = Jsoup.parse(article?.htmlContent ?: "").text().take(LOOKUP_MAX_CHARS)
         perfTracker.recordTool(
             name = "lookupArticle",
             startOffsetMs = startOffset,
