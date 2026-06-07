@@ -81,4 +81,14 @@ class ChatViewModel @Inject constructor(
         _messages.value = emptyList()
         llmService.resetConversation()
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Leaving the chat view: start the next session fresh so accumulated tool
+        // results / reasoning from this session don't bleed into the next one.
+        if (llmService.isInitialized()) {
+            llmService.resetConversation()
+            Log.d(TAG, "Chat view cleared — conversation reset")
+        }
+    }
 }

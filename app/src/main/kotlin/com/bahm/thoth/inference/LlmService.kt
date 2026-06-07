@@ -36,6 +36,15 @@ class LlmService @Inject constructor(
     companion object {
         private const val TAG = "LlmService"
         private val THINKING_PATTERN = Regex("""<\|channel>thought\s*\n?(.*?)<channel\|>""", RegexOption.DOT_MATCHES_ALL)
+
+        // Total token budget for the engine. Set explicitly (vs. the library default) so a
+        // single turn — system prompt + up to ~3 searches' results + reasoning + answer —
+        // doesn't truncate before the model calls submitAnswer.
+        private const val MAX_NUM_TOKENS = 4096
+
+        // Below this, a no-submitAnswer plain-text response is treated as a degenerate
+        // miss and replaced with a friendly message instead of a truncated fragment.
+        private const val MIN_PLAIN_TEXT_CHARS = 40
     }
 
     private var engine: Engine? = null
@@ -52,8 +61,8 @@ class LlmService @Inject constructor(
             Log.d(TAG, "Loading model from: $modelPath")
             val startTime = System.currentTimeMillis()
 
-            val config = EngineConfig(modelPath)
-            Log.d(TAG, "EngineConfig maxNumTokens=${config.maxNumTokens} (null = library default)")
+            val config = EngineConfig(modelPath = modelPath, maxNumTokens = MAX_NUM_TOKENS)
+            Log.d(TAG, "EngineConfig maxNumTokens=${config.maxNumTokens}")
             val eng = Engine(config)
             eng.initialize()
 
@@ -116,11 +125,17 @@ class LlmService @Inject constructor(
                 perfTracker.finishMessage(structured.groundedCount, structured.claims.size)
                 emit(html)
             } else {
-                // Model produced no submitAnswer call — fall back to whatever plain text it emitted.
+                // Model produced no submitAnswer call. Keep a substantive plain-text reply
+                // (e.g. a clarification), but replace a degenerate fragment with a clean message.
                 val cleanText = stripThinking(rawText)
                 Log.w(TAG, "No structured response — model did not call submitAnswer. textLen=${rawText.length}, channels=${collected.channels.keys}")
                 perfTracker.finishMessage(0, 0)
-                emit(cleanText.ifBlank { "(no answer produced)" })
+                val out = if (cleanText.length >= MIN_PLAIN_TEXT_CHARS) {
+                    cleanText
+                } else {
+                    "<p>I couldn't find a clear answer to that. Try rephrasing with more specific terms.</p>"
+                }
+                emit(out)
             }
         }
     }

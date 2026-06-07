@@ -116,7 +116,10 @@ class DebugController @Inject constructor(
                             writeResult(q, "error", "model not loaded", 0, 0)
                             return@launch
                         }
-                        Log.d(TAG, "DEBUG_QUERY running: \"$q\"")
+                        // Independent tests: start each query from a clean conversation so
+                        // prior turns' context can't contaminate this one.
+                        llmService.resetConversation()
+                        Log.d(TAG, "DEBUG_QUERY running (fresh conversation): \"$q\"")
                         var response = ""
                         llmService.sendMessage(q)
                             .catch { e -> response = "ERROR: ${e.message}" }
