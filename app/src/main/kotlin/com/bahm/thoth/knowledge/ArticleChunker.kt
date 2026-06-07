@@ -40,6 +40,7 @@ class ArticleChunker @Inject constructor() {
 
         val passages = mutableListOf<Passage>()
         var currentHeading: String? = null
+        var currentAnchor: String? = null
         var buffer = StringBuilder()
         var overlapText = ""
 
@@ -52,6 +53,7 @@ class ArticleChunker @Inject constructor() {
                         text = text,
                         articleTitle = article.title,
                         sectionHeading = currentHeading,
+                        sectionAnchor = currentAnchor,
                         zimEntryPath = article.path,
                         chunkIndex = passages.size,
                     )
@@ -104,8 +106,9 @@ class ArticleChunker @Inject constructor() {
 
         // Process direct children of the content root
         for (element in contentRoot.children()) {
-            processElement(element, ::appendText, ::flushBuffer) { heading ->
+            processElement(element, ::appendText, ::flushBuffer) { heading, anchor ->
                 currentHeading = heading
+                currentAnchor = anchor.ifEmpty { null }
             }
         }
 
@@ -117,14 +120,20 @@ class ArticleChunker @Inject constructor() {
         element: Element,
         appendText: (String) -> Unit,
         flushBuffer: () -> Unit,
-        setHeading: (String) -> Unit,
+        setHeading: (heading: String, anchor: String) -> Unit,
     ) {
         val tagName = element.tagName().lowercase()
 
         when {
             tagName in setOf("h1", "h2", "h3") -> {
                 flushBuffer()
-                setHeading(element.text())
+                // mwoffliner puts the section id directly on the heading element
+                // (e.g. <h2 id="History">); older dumps use a child .mw-headline span.
+                val anchor = element.id().ifEmpty {
+                    element.selectFirst(".mw-headline[id]")?.id()
+                        ?: element.selectFirst("[id]")?.id().orEmpty()
+                }
+                setHeading(element.text(), anchor)
             }
 
             tagName == "table" -> {

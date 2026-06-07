@@ -20,6 +20,7 @@ class Bm25ScorerTest {
         text = text,
         articleTitle = "Test",
         sectionHeading = null,
+        sectionAnchor = null,
         zimEntryPath = "A/Test",
         chunkIndex = index,
     )

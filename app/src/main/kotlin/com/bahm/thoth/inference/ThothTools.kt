@@ -66,6 +66,7 @@ class ThothTools @Inject constructor(
                 PassageSource(
                     articleTitle = passage.articleTitle,
                     sectionHeading = passage.sectionHeading ?: "",
+                    sectionAnchor = passage.sectionAnchor ?: "",
                     zimEntryPath = passage.zimEntryPath,
                 )
             )

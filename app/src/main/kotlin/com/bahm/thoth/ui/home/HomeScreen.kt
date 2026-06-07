@@ -52,7 +52,7 @@ import com.bahm.thoth.ui.chat.UserMessageBubble
 fun HomeScreen(
     onSearchDetail: (query: String) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenArticle: (zimEntryPath: String) -> Unit,
+    onOpenArticle: (zimEntryPath: String, anchor: String?, heading: String?) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val llmState by viewModel.llmState.collectAsState()
@@ -145,6 +145,7 @@ fun HomeScreen(
                             ),
                             onOpenArticle = onOpenArticle,
                         )
+                        Spacer(Modifier.height(8.dp))
                     }
 
                     // Input revealed: ask a question.

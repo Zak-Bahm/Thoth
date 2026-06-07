@@ -5,6 +5,7 @@ data class Passage(
     val text: String,
     val articleTitle: String,
     val sectionHeading: String?,
+    val sectionAnchor: String?,
     val zimEntryPath: String,
     val chunkIndex: Int,
 )

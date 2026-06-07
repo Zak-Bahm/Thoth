@@ -16,9 +16,11 @@ object Routes {
     const val HOME = "home"
     const val CHAT = "chat?q={q}"
     const val SETTINGS = "settings"
-    const val ARTICLE = "article/{zimPath}"
+    const val ARTICLE = "article/{zimPath}?a={anchor}&h={heading}"
 
-    fun article(zimEntryPath: String): String = "article/${Uri.encode(zimEntryPath)}"
+    fun article(zimEntryPath: String, anchor: String? = null, heading: String? = null): String =
+        "article/${Uri.encode(zimEntryPath)}" +
+            "?a=${Uri.encode(anchor.orEmpty())}&h=${Uri.encode(heading.orEmpty())}"
 
     /** Open the detailed chat, optionally pre-running a question handed off from Home. */
     fun chat(query: String? = null): String =
@@ -32,8 +34,8 @@ fun ThothNavGraph(navController: NavHostController) {
             HomeScreen(
                 onSearchDetail = { query -> navController.navigate(Routes.chat(query)) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                onOpenArticle = { zimEntryPath ->
-                    navController.navigate(Routes.article(zimEntryPath))
+                onOpenArticle = { zimEntryPath, anchor, heading ->
+                    navController.navigate(Routes.article(zimEntryPath, anchor, heading))
                 },
             )
         }
@@ -49,8 +51,8 @@ fun ThothNavGraph(navController: NavHostController) {
         ) { backStackEntry ->
             ChatScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onOpenArticle = { zimEntryPath ->
-                    navController.navigate(Routes.article(zimEntryPath))
+                onOpenArticle = { zimEntryPath, anchor, heading ->
+                    navController.navigate(Routes.article(zimEntryPath, anchor, heading))
                 },
                 initialQuery = backStackEntry.arguments?.getString("q"),
             )
@@ -60,11 +62,25 @@ fun ThothNavGraph(navController: NavHostController) {
         }
         composable(
             route = Routes.ARTICLE,
-            arguments = listOf(navArgument("zimPath") { type = NavType.StringType }),
+            arguments = listOf(
+                navArgument("zimPath") { type = NavType.StringType },
+                navArgument("anchor") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("heading") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
         ) { backStackEntry ->
             val zimPath = backStackEntry.arguments?.getString("zimPath").orEmpty()
             ArticleScreen(
                 zimEntryPath = zimPath,
+                anchor = backStackEntry.arguments?.getString("anchor")?.ifBlank { null },
+                heading = backStackEntry.arguments?.getString("heading")?.ifBlank { null },
                 onNavigateBack = { navController.popBackStack() },
             )
         }

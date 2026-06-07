@@ -42,7 +42,7 @@ import com.bahm.thoth.inference.LlmState
 @Composable
 fun ChatScreen(
     onNavigateBack: () -> Unit,
-    onOpenArticle: (zimEntryPath: String) -> Unit,
+    onOpenArticle: (zimEntryPath: String, anchor: String?, heading: String?) -> Unit,
     initialQuery: String? = null,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {

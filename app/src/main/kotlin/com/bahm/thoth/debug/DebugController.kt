@@ -58,6 +58,7 @@ class DebugController @Inject constructor(
         const val ACTION_QUERY_QUICK = "com.bahm.thoth.DEBUG_QUERY_QUICK"
         const val ACTION_SEARCH = "com.bahm.thoth.DEBUG_SEARCH"
         const val ACTION_LOAD = "com.bahm.thoth.DEBUG_LOAD"
+        const val ACTION_DUMP = "com.bahm.thoth.DEBUG_DUMP"
         private const val MINI_FILENAME = "wikipedia_en_all_mini_2026-03.zim"
         private const val NOPIC_FILENAME = "wikipedia_en_all_nopic_2026-03.zim"
         private const val MODEL_FILENAME = "gemma-4-E4B-it.litertlm"
@@ -140,7 +141,64 @@ class DebugController @Inject constructor(
                 }
             }
 
+            ACTION_DUMP -> {
+                val q = query?.trim().orEmpty()
+                if (q.isEmpty()) {
+                    Log.w(TAG, "DEBUG_DUMP with empty 'q' — ignoring")
+                    return
+                }
+                scope.launch {
+                    try {
+                        writeStatus("DUMPING")
+                        ensureZimOpen()
+                        if (!zimRepository.isOpen()) {
+                            Log.w(TAG, "DEBUG_DUMP: no ZIM open")
+                            return@launch
+                        }
+                        val article = zimRepository.getArticleByTitle(q)
+                            ?: zimRepository.getArticleByPath(q)
+                        if (article == null) {
+                            Log.w(TAG, "DEBUG_DUMP: article not found for \"$q\"")
+                            File(debugDir(), "dump_headings.txt").writeText("NOT FOUND: $q\n")
+                            return@launch
+                        }
+                        writeDump(article)
+                        Log.d(TAG, "DEBUG_DUMP \"$q\": ${article.htmlContent.length} chars")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "DEBUG_DUMP failed: ${e.message}", e)
+                    } finally {
+                        writeStatus("IDLE")
+                    }
+                }
+            }
+
             else -> Log.w(TAG, "Unknown debug action: $action")
+        }
+    }
+
+    /** Temporary: dumps raw article HTML + a digest of every heading element's markup. */
+    private fun writeDump(article: Article) {
+        try {
+            File(debugDir(), "dump_article.html").writeText(article.htmlContent)
+            val doc = org.jsoup.Jsoup.parse(article.htmlContent)
+            val sb = StringBuilder()
+            sb.append("title=").append(article.title).append("\n")
+            sb.append("path=").append(article.path).append("\n")
+            sb.append("htmlChars=").append(article.htmlContent.length).append("\n\n")
+            for (h in doc.select("h1, h2, h3, h4")) {
+                sb.append("<").append(h.tagName()).append(">")
+                sb.append(" id='").append(h.id()).append("'")
+                val headline = h.selectFirst(".mw-headline")
+                sb.append(" mw-headline.id='").append(headline?.id() ?: "").append("'")
+                val anyId = h.selectFirst("[id]")
+                sb.append(" firstDescId='").append(anyId?.id() ?: "").append("'")
+                sb.append(" text='").append(h.text().take(60)).append("'")
+                sb.append("\n    outerHtml: ").append(h.outerHtml().take(220).replace("\n", " "))
+                sb.append("\n")
+            }
+            File(debugDir(), "dump_headings.txt").writeText(sb.toString())
+        } catch (e: Exception) {
+            Log.e(TAG, "writeDump failed: ${e.message}")
         }
     }
 

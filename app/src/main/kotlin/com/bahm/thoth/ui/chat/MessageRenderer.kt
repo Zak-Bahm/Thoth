@@ -49,7 +49,7 @@ fun UserMessageBubble(message: ChatMessage) {
 @Composable
 fun AssistantMessageBubble(
     message: ChatMessage,
-    onOpenArticle: (zimEntryPath: String) -> Unit,
+    onOpenArticle: (zimEntryPath: String, anchor: String?, heading: String?) -> Unit,
 ) {
     val textColor = MaterialTheme.colorScheme.onSurfaceVariant
     val accentColor = MaterialTheme.colorScheme.primary

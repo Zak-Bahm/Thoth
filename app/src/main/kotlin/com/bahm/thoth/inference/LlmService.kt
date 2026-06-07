@@ -273,6 +273,7 @@ class LlmService @Inject constructor(
                 val topSource = PassageSource(
                     articleTitle = src.articleTitle,
                     sectionHeading = src.sectionHeading ?: "",
+                    sectionAnchor = src.sectionAnchor ?: "",
                     zimEntryPath = src.zimEntryPath,
                 )
                 val structured = StructuredResponse(

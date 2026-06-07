@@ -1,5 +1,6 @@
 package com.bahm.thoth.inference
 
+import android.net.Uri
 import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,7 +38,7 @@ class ToolHandler @Inject constructor(
             sb.append("<p>")
             sb.append(claim.text)
             if (claim.isGrounded && claim.source != null) {
-                sb.append(" <cite>[${claim.source.articleTitle}]</cite>")
+                sb.append(" ").append(citationLink(claim.source))
             }
             sb.append("</p>")
         }
@@ -46,4 +47,24 @@ class ToolHandler @Inject constructor(
         }
         return sb.toString()
     }
+
+    /**
+     * A tappable inline citation. The href is a custom `thoth://sec` URI carrying the article
+     * path plus the section anchor (and heading text as a fallback). [com.bahm.thoth.ui.common]'s
+     * AnswerContent parses it on tap to deep-link into the article at the cited section.
+     */
+    private fun citationLink(source: PassageSource): String {
+        val uri = "thoth://sec?p=${Uri.encode(source.zimEntryPath)}" +
+            "&a=${Uri.encode(source.sectionAnchor)}" +
+            "&h=${Uri.encode(source.sectionHeading)}"
+        val label = if (source.sectionHeading.isNotBlank()) {
+            "${source.articleTitle}:${source.sectionHeading}"
+        } else {
+            source.articleTitle
+        }
+        return "<a href=\"${uri.htmlEscape()}\">[${label.htmlEscape()}]</a>"
+    }
+
+    private fun String.htmlEscape(): String =
+        replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 }
