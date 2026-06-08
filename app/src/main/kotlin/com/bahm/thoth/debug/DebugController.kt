@@ -3,6 +3,8 @@ package com.bahm.thoth.debug
 import android.content.Context
 import android.util.Log
 import com.bahm.thoth.inference.AnswerMode
+import com.bahm.thoth.inference.EvalRecord
+import com.bahm.thoth.inference.EvalRunner
 import com.bahm.thoth.inference.LlmService
 import com.bahm.thoth.inference.ModelDownloadService
 import com.bahm.thoth.inference.ToolHandler
@@ -15,7 +17,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -47,6 +48,7 @@ class DebugController @Inject constructor(
     @ApplicationContext private val context: Context,
     private val llmService: LlmService,
     private val toolHandler: ToolHandler,
+    private val evalRunner: EvalRunner,
     private val searchService: SearchService,
     private val zimRepository: ZimRepository,
     private val zimDownloadService: ZimDownloadService,
@@ -120,17 +122,13 @@ class DebugController @Inject constructor(
                             writeResult(q, "error", "model not loaded", 0, 0)
                             return@launch
                         }
-                        // Independent tests: start each query from a clean conversation so
-                        // prior turns' context can't contaminate this one.
-                        llmService.resetConversation()
+                        // EvalRunner starts each query from a clean conversation (independent
+                        // tests) and assembles the platform-neutral eval record.
                         Log.d(TAG, "$action running ($mode, fresh conversation): \"$q\"")
-                        var response = ""
-                        llmService.sendMessage(q, mode)
-                            .catch { e -> response = "ERROR: ${e.message}" }
-                            .collect { response = it }
-                        val s = toolHandler.getStructuredResponse()
-                        writeResult(q, "done", response, s?.groundedCount ?: 0, s?.claims?.size ?: 0)
-                        Log.d(TAG, "DEBUG_QUERY done: respLen=${response.length} grounded=${s?.groundedCount ?: 0}/${s?.claims?.size ?: 0}")
+                        val record = evalRunner.runQuery(q, mode)
+                        writeResult(q, record.status, record.answerHtml, record.grounded, record.totalClaims)
+                        writeEval(record)
+                        Log.d(TAG, "DEBUG_QUERY done: respLen=${record.answerHtml.length} grounded=${record.grounded}/${record.totalClaims} hits=${record.retrievedHits.size}")
                     } catch (e: Exception) {
                         Log.e(TAG, "DEBUG_QUERY failed: ${e.message}", e)
                         writeResult(q, "error", e.message ?: "unknown", 0, 0)
@@ -259,6 +257,15 @@ class DebugController @Inject constructor(
             File(debugDir(), "last_response.txt").writeText(response)
         } catch (e: Exception) {
             Log.e(TAG, "writeResult failed: ${e.message}")
+        }
+    }
+
+    /** One self-contained eval record per query (answer + citations + retrieved hits + timings). */
+    private fun writeEval(record: EvalRecord) {
+        try {
+            File(debugDir(), "eval_session.jsonl").appendText(record.toJson() + "\n")
+        } catch (e: Exception) {
+            Log.e(TAG, "writeEval failed: ${e.message}")
         }
     }
 

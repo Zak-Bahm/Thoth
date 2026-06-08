@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Thoth"
 include(":app")
+include(":core")
+include(":desktop")

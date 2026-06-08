@@ -1,6 +1,6 @@
 package com.bahm.thoth.knowledge
 
-import android.util.Log
+import com.bahm.thoth.core.Log
 import com.bahm.thoth.knowledge.models.SearchResult
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -9,7 +9,7 @@ import kotlinx.coroutines.withContext
 
 @Singleton
 class SearchService @Inject constructor(
-    private val zimRepository: ZimRepository,
+    private val zim: ZimSource,
     private val chunker: ArticleChunker,
     private val bm25Scorer: Bm25Scorer,
 ) {
@@ -22,7 +22,7 @@ class SearchService @Inject constructor(
         val startTime = System.currentTimeMillis()
 
         // 1. Search ZIM for top matching articles
-        val articles = zimRepository.searchArticles(query, maxResults = MAX_ARTICLES)
+        val articles = zim.searchArticles(query, maxResults = MAX_ARTICLES)
         val afterZim = System.currentTimeMillis()
         val zimTime = afterZim - startTime
 

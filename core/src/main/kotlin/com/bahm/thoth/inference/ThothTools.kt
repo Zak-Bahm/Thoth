@@ -1,8 +1,8 @@
 package com.bahm.thoth.inference
 
-import android.util.Log
+import com.bahm.thoth.core.Log
 import com.bahm.thoth.knowledge.SearchService
-import com.bahm.thoth.knowledge.ZimRepository
+import com.bahm.thoth.knowledge.ZimSource
 import com.google.ai.edge.litertlm.Tool
 import com.google.ai.edge.litertlm.ToolParam
 import com.google.ai.edge.litertlm.ToolSet
@@ -33,7 +33,7 @@ data class ValidatedClaim(
 @Singleton
 class ThothTools @Inject constructor(
     private val searchService: SearchService,
-    private val zimRepository: ZimRepository,
+    private val zim: ZimSource,
     private val perfTracker: PerfTracker,
 ) : ToolSet {
 
@@ -49,6 +49,14 @@ class ThothTools @Inject constructor(
     var callCount: Int = 0
     var lastResponse: StructuredResponse? = null
 
+    /**
+     * Passages returned by searches during the current message (thorough mode: every
+     * searchKnowledge call; quick mode: the single direct retrieval, appended by LlmService).
+     * Cleared per message via [ToolHandler.resetForNewMessage]; surfaced in the eval record so
+     * the harness can score retrieval recall (was the gold article/section actually retrieved?).
+     */
+    val retrievedHits = mutableListOf<RetrievedHit>()
+
     @Tool(description = "Search Wikipedia using technical keywords. Use specific nouns and terms, NOT natural language questions. Example: for 'why do leaves fall' search 'deciduous abscission leaf senescence'. For 'how do planes fly' search 'aerodynamic lift wing airfoil'.")
     fun searchKnowledge(
         @ToolParam(description = "Technical keywords and terms (not a question). Use 3-5 specific words.")
@@ -61,7 +69,7 @@ class ThothTools @Inject constructor(
 
         val nonces = mutableListOf<String>()
         val jsonArray = JSONArray()
-        for (passage in passages) {
+        passages.forEachIndexed { index, passage ->
             val nonce = NonceRegistry.generate(
                 PassageSource(
                     articleTitle = passage.articleTitle,
@@ -71,6 +79,15 @@ class ThothTools @Inject constructor(
                 )
             )
             nonces.add(nonce)
+            retrievedHits.add(
+                RetrievedHit(
+                    articleTitle = passage.articleTitle,
+                    sectionHeading = passage.sectionHeading ?: "",
+                    sectionAnchor = passage.sectionAnchor ?: "",
+                    zimEntryPath = passage.zimEntryPath,
+                    rank = index,
+                )
+            )
             jsonArray.put(JSONObject().apply {
                 put("id", nonce)
                 put("title", passage.articleTitle)
@@ -107,7 +124,7 @@ class ThothTools @Inject constructor(
         val startOffset = perfTracker.elapsedMs()
         callCount++
         Log.d(TAG, "lookupArticle | title=\"$title\"")
-        val article = runBlocking { zimRepository.getArticleByTitle(title) }
+        val article = runBlocking { zim.getArticleByTitle(title) }
         val plainText = Jsoup.parse(article?.htmlContent ?: "").text().take(LOOKUP_MAX_CHARS)
         perfTracker.recordTool(
             name = "lookupArticle",

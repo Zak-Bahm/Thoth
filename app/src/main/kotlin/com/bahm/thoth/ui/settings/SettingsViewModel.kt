@@ -223,7 +223,7 @@ class SettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val articles = zimRepository.searchArticles(query)
+                val articles = zimRepository.searchArticles(query, maxResults = 20)
                 Log.d(TAG, "Article search(\"$query\"): ${articles.size} results")
                 _searchResults.value = articles.map { article ->
                     SearchResultItem(title = article.title, path = article.path)

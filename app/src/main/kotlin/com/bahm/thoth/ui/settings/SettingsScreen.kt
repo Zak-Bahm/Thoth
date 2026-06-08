@@ -363,9 +363,10 @@ private fun SettingsContent(
                             item.passage.articleTitle,
                             style = MaterialTheme.typography.titleSmall,
                         )
-                        if (item.passage.sectionHeading != null) {
+                        val sectionHeading = item.passage.sectionHeading
+                        if (sectionHeading != null) {
                             Text(
-                                item.passage.sectionHeading,
+                                sectionHeading,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
                             )

@@ -45,7 +45,10 @@ kotlin {
 }
 
 dependencies {
-    // LiteRT-LM (Gemma inference)
+    // Shared, platform-neutral pipeline (retrieval + inference orchestration + eval).
+    implementation(project(":core"))
+
+    // LiteRT-LM (Gemma inference) — provides the litertlm runtime + native libs for :core.
     implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
 
     // java-libkiwix (ZIM file access)

@@ -1,6 +1,6 @@
 package com.bahm.thoth.inference
 
-import android.util.Log
+import com.bahm.thoth.core.Log
 import com.bahm.thoth.knowledge.SearchService
 import com.bahm.thoth.knowledge.models.Passage
 import com.google.ai.edge.litertlm.Content
@@ -34,6 +34,7 @@ class LlmService @Inject constructor(
     private val toolHandler: ToolHandler,
     private val perfTracker: PerfTracker,
     private val searchService: SearchService,
+    private val engineSettings: EngineSettings,
 ) {
 
     companion object {
@@ -78,8 +79,13 @@ class LlmService @Inject constructor(
             Log.d(TAG, "Loading model from: $modelPath")
             val startTime = System.currentTimeMillis()
 
-            val config = EngineConfig(modelPath = modelPath, maxNumTokens = MAX_NUM_TOKENS)
-            Log.d(TAG, "EngineConfig maxNumTokens=${config.maxNumTokens}")
+            val backend = engineSettings.backend
+            val config = if (backend != null) {
+                EngineConfig(modelPath = modelPath, maxNumTokens = MAX_NUM_TOKENS, backend = backend)
+            } else {
+                EngineConfig(modelPath = modelPath, maxNumTokens = MAX_NUM_TOKENS)
+            }
+            Log.d(TAG, "EngineConfig maxNumTokens=${config.maxNumTokens} backend=${backend?.name ?: "default"}")
             val eng = Engine(config)
             eng.initialize()
 
@@ -222,6 +228,18 @@ class LlmService @Inject constructor(
             val retrieveStart = perfTracker.elapsedMs()
             val result = searchService.search(keywords, topK = QUICK_TOP_K)
             val passages = result.passages.take(QUICK_TOP_K)
+            // Record the direct retrieval as eval hits (quick mode skips the searchKnowledge tool).
+            passages.forEachIndexed { i, p ->
+                thothTools.retrievedHits.add(
+                    RetrievedHit(
+                        articleTitle = p.articleTitle,
+                        sectionHeading = p.sectionHeading ?: "",
+                        sectionAnchor = p.sectionAnchor ?: "",
+                        zimEntryPath = p.zimEntryPath,
+                        rank = i,
+                    )
+                )
+            }
             perfTracker.recordTool(
                 name = "quickRetrieve",
                 startOffsetMs = retrieveStart,

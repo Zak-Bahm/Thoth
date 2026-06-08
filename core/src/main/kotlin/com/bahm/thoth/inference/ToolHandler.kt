@@ -1,7 +1,7 @@
 package com.bahm.thoth.inference
 
-import android.net.Uri
-import android.util.Log
+import com.bahm.thoth.core.Log
+import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,11 +17,15 @@ class ToolHandler @Inject constructor(
     fun resetForNewMessage() {
         thothTools.callCount = 0
         thothTools.lastResponse = null
+        thothTools.retrievedHits.clear()
         NonceRegistry.reset()
-        Log.d(TAG, "Reset for new message — callCount=0, nonces cleared, lastResponse=null")
+        Log.d(TAG, "Reset for new message — callCount=0, nonces cleared, lastResponse=null, hits cleared")
     }
 
     fun getStructuredResponse(): StructuredResponse? = thothTools.lastResponse
+
+    /** Passages retrieved by searches during the current message (for eval retrieval scoring). */
+    fun getRetrievedHits(): List<RetrievedHit> = thothTools.retrievedHits.toList()
 
     /**
      * Quick Answer mode bypasses the submitAnswer tool, so it sets the structured response
@@ -54,9 +58,9 @@ class ToolHandler @Inject constructor(
      * AnswerContent parses it on tap to deep-link into the article at the cited section.
      */
     private fun citationLink(source: PassageSource): String {
-        val uri = "thoth://sec?p=${Uri.encode(source.zimEntryPath)}" +
-            "&a=${Uri.encode(source.sectionAnchor)}" +
-            "&h=${Uri.encode(source.sectionHeading)}"
+        val uri = "thoth://sec?p=${urlEncode(source.zimEntryPath)}" +
+            "&a=${urlEncode(source.sectionAnchor)}" +
+            "&h=${urlEncode(source.sectionHeading)}"
         val label = if (source.sectionHeading.isNotBlank()) {
             "${source.articleTitle}:${source.sectionHeading}"
         } else {
@@ -67,4 +71,6 @@ class ToolHandler @Inject constructor(
 
     private fun String.htmlEscape(): String =
         replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
+    private fun urlEncode(s: String): String = URLEncoder.encode(s, "UTF-8")
 }

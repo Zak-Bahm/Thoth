@@ -1,10 +1,9 @@
 package com.bahm.thoth.inference
 
-import android.util.Log
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.bahm.thoth.core.Log
+import com.bahm.thoth.core.OutputSink
 import org.json.JSONArray
 import org.json.JSONObject
-import android.content.Context
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,7 +44,7 @@ data class PerfReport(
  */
 @Singleton
 class PerfTracker @Inject constructor(
-    @ApplicationContext private val context: Context,
+    private val outputSink: OutputSink,
 ) {
     companion object {
         private const val TAG = "PERF"
@@ -57,6 +56,11 @@ class PerfTracker @Inject constructor(
     private var answerChars: Int = 0
     private var emittedChunks: Int = 0
     private val spans = mutableListOf<ToolSpan>()
+
+    /** The most recently finished message's report — read by EvalRunner to fill EvalRecord timings. */
+    @Volatile
+    var lastReport: PerfReport? = null
+        private set
 
     @Synchronized
     fun startMessage(query: String) {
@@ -122,6 +126,7 @@ class PerfTracker @Inject constructor(
             totalClaims = totalClaims,
         )
 
+        lastReport = report
         logSummary(report)
         writeJsonl(report)
         startMs = 0
@@ -157,11 +162,7 @@ class PerfTracker @Inject constructor(
         }
     }
 
-    fun logDir(): File {
-        val dir = File(context.getExternalFilesDir(null), "perf")
-        if (!dir.exists()) dir.mkdirs()
-        return dir
-    }
+    fun logDir(): File = outputSink.dir("perf")
 
     private fun logSummary(r: PerfReport) {
         val pct = if (r.totalMs > 0) (r.llmComputeMs * 100 / r.totalMs) else 0

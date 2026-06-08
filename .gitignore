@@ -21,3 +21,7 @@ captures/
 # OS
 .DS_Store
 Thumbs.db
+
+# Desktop-built native libs (regenerate via desktop/build-zim-native.sh)
+desktop/src/main/resources/native/
+desktop/build/zim-native/

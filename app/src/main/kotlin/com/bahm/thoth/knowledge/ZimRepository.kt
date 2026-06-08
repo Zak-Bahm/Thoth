@@ -15,7 +15,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ZimRepository @Inject constructor() {
+class ZimRepository @Inject constructor() : ZimSource {
 
     companion object {
         private const val TAG = "ZimRepository"
@@ -71,7 +71,7 @@ class ZimRepository @Inject constructor() {
 
     fun getFilename(): String? = archive?.getFilename()
 
-    suspend fun getArticleByTitle(title: String): Article? = withContext(Dispatchers.IO) {
+    override suspend fun getArticleByTitle(title: String): Article? = withContext(Dispatchers.IO) {
         mutex.withLock {
             val arch = archive ?: return@withContext null
             if (!arch.hasEntryByTitle(title)) return@withContext null
@@ -94,7 +94,7 @@ class ZimRepository @Inject constructor() {
         }
     }
 
-    suspend fun getArticleByPath(path: String): Article? = withContext(Dispatchers.IO) {
+    override suspend fun getArticleByPath(path: String): Article? = withContext(Dispatchers.IO) {
         mutex.withLock {
             val arch = archive ?: return@withContext null
             if (!arch.hasEntryByPath(path)) return@withContext null
@@ -135,7 +135,7 @@ class ZimRepository @Inject constructor() {
         }
     }
 
-    suspend fun searchArticles(query: String, maxResults: Int = 20): List<Article> =
+    override suspend fun searchArticles(query: String, maxResults: Int): List<Article> =
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 val arch = archive ?: return@withContext emptyList()
