@@ -38,13 +38,22 @@ fun main(args: Array<String>) {
     val search = SearchService(zim, ArticleChunker(), Bm25Scorer())
     val perf = PerfTracker(sink)
 
+    val backend = if (env("THOTH_BACKEND")?.lowercase() == "cpu") Backend.CPU() else Backend.GPU()
+
+    // `serve` manages its own ZIM lifecycle (closed in the shutdown hook).
+    if (command == "serve") {
+        val port = env("THOTH_PORT")?.toIntOrNull() ?: 8080
+        runServeCmd(search, zim, requireModel(), sink, backend, port)
+        return
+    }
+
     try {
         when (command) {
             // ZIM-only path: no inference engine constructed.
             "search" -> runSearch(search, requireQuery(query))
-            "load" -> runQueryCmd(search, zim, perf, sink, requireModel(), null, AnswerMode.THOROUGH)
-            "query" -> runQueryCmd(search, zim, perf, sink, requireModel(), requireQuery(query), AnswerMode.THOROUGH)
-            "query-quick" -> runQueryCmd(search, zim, perf, sink, requireModel(), requireQuery(query), AnswerMode.QUICK)
+            "load" -> runQueryCmd(search, zim, perf, sink, backend, requireModel(), null, AnswerMode.THOROUGH)
+            "query" -> runQueryCmd(search, zim, perf, sink, backend, requireModel(), requireQuery(query), AnswerMode.THOROUGH)
+            "query-quick" -> runQueryCmd(search, zim, perf, sink, backend, requireModel(), requireQuery(query), AnswerMode.QUICK)
             else -> { System.err.println("Unknown command: $command"); usage() }
         }
     } finally {
@@ -69,11 +78,11 @@ private fun runQueryCmd(
     zim: DesktopZimRepository,
     perf: PerfTracker,
     sink: DesktopOutputSink,
+    backend: Backend,
     modelPath: String,
     query: String?,
     mode: AnswerMode,
 ) {
-    val backend = if (env("THOTH_BACKEND")?.lowercase() == "cpu") Backend.CPU() else Backend.GPU()
     val tools = ThothTools(search, zim, perf)
     val toolHandler = ToolHandler(tools)
     val llm = LlmService(tools, toolHandler, perf, search, EngineSettings(backend))
@@ -110,8 +119,8 @@ private fun usage() {
     System.err.println(
         """
         Thoth desktop runner
-          Commands: search <q> | load | query <q> | query-quick <q>
-          Env: THOTH_MODEL=<.litertlm>  THOTH_ZIM=<.zim>  THOTH_OUT=<dir>  THOTH_BACKEND=gpu|cpu
+          Commands: search <q> | load | query <q> | query-quick <q> | serve
+          Env: THOTH_MODEL=<.litertlm>  THOTH_ZIM=<.zim>  THOTH_OUT=<dir>  THOTH_BACKEND=gpu|cpu  THOTH_PORT=<port>
         """.trimIndent(),
     )
 }

@@ -40,16 +40,42 @@ THOTH_MODEL=/path/to/gemma-4-E4B-it.litertlm THOTH_ZIM=/path/to/wiki.zim THOTH_O
   ./gradlew :desktop:run --args="query-quick 'what is the capital of france'"
 
 THOTH_MODEL=... THOTH_ZIM=... ./gradlew :desktop:run --args="query 'why is the sky blue'"
+
+# Persistent HTTP server — loads the model once, then handles requests indefinitely:
+THOTH_MODEL=... THOTH_ZIM=... THOTH_PORT=8080 ./gradlew :desktop:run --args="serve"
 ```
 
 | Env var | Meaning | Default |
 |---------|---------|---------|
-| `THOTH_MODEL` | path to the `.litertlm` model (query/load only) | — |
+| `THOTH_MODEL` | path to the `.litertlm` model (query/load/serve only) | — |
 | `THOTH_ZIM`   | path to the `.zim` archive | — (required) |
 | `THOTH_OUT`   | output dir for `debug/eval_session.jsonl` + `perf/` | `./thoth-out` |
 | `THOTH_BACKEND` | `gpu` or `cpu` | `gpu` |
+| `THOTH_PORT`  | HTTP port for `serve` mode | `8080` |
 
-Commands: `search <q>` · `load` · `query <q>` (thorough) · `query-quick <q>`.
+Commands: `search <q>` · `load` · `query <q>` (thorough) · `query-quick <q>` · `serve`.
+
+### HTTP server (`serve`)
+
+Keeps the model and ZIM resident in memory. Requests are handled sequentially (the inference
+engine is single-threaded). Appends to `<THOTH_OUT>/debug/eval_session.jsonl` on each `/query`
+call, same as the one-shot commands.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | `GET` | `{"status":"ok","modelLoaded":true}` |
+| `/search` | `GET` | BM25 retrieval — no model. Params: `q=<query>`, `topK=<N>` (default 10, max 50) |
+| `/query`  | `POST` | Full pipeline. Body: `{"query":"…","mode":"quick\|thorough"}`. Returns eval record JSON. |
+
+```bash
+curl http://localhost:8080/health
+
+curl "http://localhost:8080/search?q=rayleigh+scattering&topK=5"
+
+curl -X POST http://localhost:8080/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"why is the sky blue","mode":"quick"}'
+```
 
 ## Notes
 
