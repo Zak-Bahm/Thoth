@@ -87,6 +87,20 @@ fun runServeCmd(
         }
     }
 
+    server.createContext("/evals") { ex ->
+        if (ex.requestMethod != "GET") { ex.jsonResponse(405, error("method not allowed")); return@createContext }
+        val evalFile = File(sink.dir("debug"), "eval_session.jsonl")
+        if (!evalFile.exists()) { ex.jsonResponse(200, "[]"); return@createContext }
+        try {
+            val limitParam = ex.queryParam("limit")?.toIntOrNull()
+            val lines = evalFile.readLines().filter { it.isNotBlank() }
+            val selected = if (limitParam != null) lines.takeLast(limitParam) else lines
+            ex.jsonResponse(200, "[${selected.joinToString(",")}]")
+        } catch (e: Exception) {
+            ex.jsonResponse(500, error(e.message ?: "failed to read evals"))
+        }
+    }
+
     server.createContext("/query") { ex ->
         if (ex.requestMethod != "POST") { ex.jsonResponse(405, error("method not allowed")); return@createContext }
         try {

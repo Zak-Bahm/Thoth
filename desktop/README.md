@@ -66,6 +66,7 @@ call, same as the one-shot commands.
 | `/health` | `GET` | `{"status":"ok","modelLoaded":true}` |
 | `/search` | `GET` | BM25 retrieval — no model. Params: `q=<query>`, `topK=<N>` (default 10, max 50) |
 | `/query`  | `POST` | Full pipeline. Body: `{"query":"…","mode":"quick\|thorough"}`. Returns eval record JSON. |
+| `/evals`  | `GET` | All records from `eval_session.jsonl` as a JSON array. Param: `limit=<N>` for the last N records. |
 
 ```bash
 curl http://localhost:8080/health
@@ -75,6 +76,8 @@ curl "http://localhost:8080/search?q=rayleigh+scattering&topK=5"
 curl -X POST http://localhost:8080/query \
   -H "Content-Type: application/json" \
   -d '{"query":"why is the sky blue","mode":"quick"}'
+
+curl "http://localhost:8080/evals?limit=10"
 ```
 
 ## Notes
