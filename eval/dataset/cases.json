@@ -1,0 +1,42 @@
+[
+  {
+    "id": "sky-blue-cause",
+    "question": "Why does the daytime sky appear blue?",
+    "goldArticles": ["Rayleigh scattering", "Diffuse sky radiation"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["rayleigh", "scattering"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "france-capital",
+    "question": "Which city is the capital of France?",
+    "goldArticles": ["France", "Paris", "List of capitals of France"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": ["paris"],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "photosynthesis-location",
+    "question": "In which organelle of a plant cell does photosynthesis occur?",
+    "goldArticles": ["Photosynthesis", "Chloroplast"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": ["chloroplast"],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "unanswerable-fictional",
+    "question": "What is the population of the city of Zubrowka Prime on Mars?",
+    "goldArticles": [],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [],
+    "answerable": false,
+    "modes": ["quick", "thorough"]
+  }
+]

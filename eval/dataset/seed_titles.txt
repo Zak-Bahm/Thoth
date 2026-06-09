@@ -1,0 +1,13 @@
+# Seed article titles for eval/extract_cases.py (Phase 0).
+# One exact ZIM article title per line. Lines starting with '#' are ignored.
+# Pick titles known to exist in your ZIM; extraction pulls authoritative sections from each.
+Photosynthesis
+Rayleigh scattering
+France
+Mount Everest
+Water
+Electron
+Photosystem
+Great Wall of China
+DNA
+Volcano
