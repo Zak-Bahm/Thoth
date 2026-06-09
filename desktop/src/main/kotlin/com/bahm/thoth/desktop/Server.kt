@@ -7,6 +7,7 @@ import com.bahm.thoth.inference.LlmService
 import com.bahm.thoth.inference.PerfTracker
 import com.bahm.thoth.inference.ThothTools
 import com.bahm.thoth.inference.ToolHandler
+import com.bahm.thoth.knowledge.ArticleChunker
 import com.bahm.thoth.knowledge.SearchService
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -36,6 +37,7 @@ fun runServeCmd(
     port: Int,
 ) {
     val perf = PerfTracker(sink)
+    val chunker = ArticleChunker()
     val tools = ThothTools(search, zim, perf)
     val toolHandler = ToolHandler(tools)
     val llm = LlmService(tools, toolHandler, perf, search, EngineSettings(backend))
@@ -84,6 +86,34 @@ fun runServeCmd(
             ex.jsonResponse(200, body.toString())
         } catch (e: Exception) {
             ex.jsonResponse(500, error(e.message ?: "search failed"))
+        }
+    }
+
+    // Article dump for the eval extraction pipeline (eval/extract_cases.py): authoritative
+    // section headings + anchors + chunked text for a seed title. ZIM only — no model inference.
+    server.createContext("/article") { ex ->
+        if (ex.requestMethod != "GET") { ex.jsonResponse(405, error("method not allowed")); return@createContext }
+        val title = ex.queryParam("title")
+        if (title == null) { ex.jsonResponse(400, error("missing query param 'title'")); return@createContext }
+        try {
+            val article = runBlocking { zim.getArticleByTitle(title) }
+            if (article == null) { ex.jsonResponse(404, error("article not found: $title")); return@createContext }
+            val sections = JSONArray()
+            chunker.chunk(article).forEachIndexed { i, p ->
+                sections.put(JSONObject()
+                    .put("chunkIndex", i)
+                    .put("heading", p.sectionHeading ?: "")
+                    .put("anchor", p.sectionAnchor ?: "")
+                    .put("zimEntryPath", p.zimEntryPath)
+                    .put("text", p.text))
+            }
+            val body = JSONObject()
+                .put("title", article.title)
+                .put("sectionCount", sections.length())
+                .put("sections", sections)
+            ex.jsonResponse(200, body.toString())
+        } catch (e: Exception) {
+            ex.jsonResponse(500, error(e.message ?: "article dump failed"))
         }
     }
 

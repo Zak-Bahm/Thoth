@@ -1,6 +1,10 @@
 .claude
 .env
 
+eval/out/
+eval/runs/
+eval/dataset/cases.draft.json
+
 # Gradle
 .gradle/
 build/

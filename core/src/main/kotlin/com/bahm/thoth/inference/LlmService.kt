@@ -237,6 +237,7 @@ class LlmService @Inject constructor(
                         sectionAnchor = p.sectionAnchor ?: "",
                         zimEntryPath = p.zimEntryPath,
                         rank = i,
+                        text = p.text.take(RetrievedHit.TEXT_MAX_CHARS),
                     )
                 )
             }

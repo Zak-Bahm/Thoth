@@ -65,6 +65,7 @@ call, same as the one-shot commands.
 |----------|--------|-------------|
 | `/health` | `GET` | `{"status":"ok","modelLoaded":true}` |
 | `/search` | `GET` | BM25 retrieval — no model. Params: `q=<query>`, `topK=<N>` (default 10, max 50) |
+| `/article` | `GET` | Chunked sections (heading, anchor, text) for one title — no model. Param: `title=<t>`. Feeds `eval/extract_cases.py`. |
 | `/query`  | `POST` | Full pipeline. Body: `{"query":"…","mode":"quick\|thorough"}`. Returns eval record JSON. |
 | `/evals`  | `GET` | All records from `eval_session.jsonl` as a JSON array. Param: `limit=<N>` for the last N records. |
 

@@ -86,6 +86,7 @@ class ThothTools @Inject constructor(
                     sectionAnchor = passage.sectionAnchor ?: "",
                     zimEntryPath = passage.zimEntryPath,
                     rank = index,
+                    text = passage.text.take(RetrievedHit.TEXT_MAX_CHARS),
                 )
             )
             jsonArray.put(JSONObject().apply {

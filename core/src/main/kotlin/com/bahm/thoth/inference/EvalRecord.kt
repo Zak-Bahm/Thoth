@@ -10,7 +10,15 @@ data class RetrievedHit(
     val sectionAnchor: String,
     val zimEntryPath: String,
     val rank: Int,
-)
+    // Truncated passage text — the evidence the LLM-as-judge faithfulness pass reads. A cited
+    // claim maps back to its hit by zimEntryPath + sectionAnchor.
+    val text: String = "",
+) {
+    companion object {
+        /** Per-hit text cap. Enough context for a faithfulness judgment without bloating records. */
+        const val TEXT_MAX_CHARS = 600
+    }
+}
 
 /** A final-answer claim with its (flattened) citation, for scoring citation correctness. */
 data class EvalClaim(
@@ -68,7 +76,8 @@ data class EvalRecord(
                     .put("sectionHeading", h.sectionHeading)
                     .put("sectionAnchor", h.sectionAnchor)
                     .put("zimEntryPath", h.zimEntryPath)
-                    .put("rank", h.rank),
+                    .put("rank", h.rank)
+                    .put("text", h.text),
             )
         }
         val obj = JSONObject()
