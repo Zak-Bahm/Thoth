@@ -10,12 +10,122 @@
     "modes": ["quick", "thorough"]
   },
   {
-    "id": "france-capital",
-    "question": "Which city is the capital of France?",
-    "goldArticles": ["France", "Paris", "List of capitals of France"],
+    "id": "rayleigh-tyndall",
+    "question": "Who first observed that light scattering off tiny particles could tint a beam blue, and roughly when?",
+    "goldArticles": ["Rayleigh scattering"],
+    "goldSection": "History",
+    "goldAnchor": "History",
+    "keyFacts": ["tyndall", "1869"],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "photon-einstein",
+    "question": "Who first proposed that light comes in discrete quanta, and in what year?",
+    "goldArticles": ["Photon"],
     "goldSection": "",
     "goldAnchor": "",
-    "keyFacts": ["paris"],
+    "keyFacts": [["einstein"], ["1905"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "periodic-table-mendeleev",
+    "question": "Who is credited with creating the first widely accepted periodic table of the elements?",
+    "goldArticles": ["Periodic table"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": ["mendeleev"],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "oxygen-atomic-number",
+    "question": "What is the atomic number of oxygen?",
+    "goldArticles": ["Oxygen"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": ["8"],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "electricity-second-ir",
+    "question": "The rapid spread of electrical technology helped drive which era of industrial change?",
+    "goldArticles": ["Electricity"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["second industrial revolution", "second industrial"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "magnetism-compass",
+    "question": "Who was the first person in Europe to describe using a compass for navigation?",
+    "goldArticles": ["Magnetism"],
+    "goldSection": "History",
+    "goldAnchor": "History",
+    "keyFacts": ["neckam"],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "moon-distance",
+    "question": "On average, how far is the Moon from the Earth?",
+    "goldArticles": ["Moon"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["384,399", "384,400", "238,854", "238,855"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "sun-fusion",
+    "question": "What process generates the energy radiated by the Sun?",
+    "goldArticles": ["Sun"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["nuclear fusion", "fusion"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "gravity-relativity",
+    "question": "Which modern theory explains gravity as the bending of spacetime, and who introduced it?",
+    "goldArticles": ["Gravity", "General relativity"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["general relativity", "general theory of relativity"], ["einstein"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "black-hole-cygnus",
+    "question": "What was the first object to be widely accepted as a black hole?",
+    "goldArticles": ["Black hole"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["cygnus"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "solar-system-age",
+    "question": "About how long ago did the Solar System form?",
+    "goldArticles": ["Solar System"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["4.6", "4.5"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "milky-way-center",
+    "question": "What sits at the center of the Milky Way galaxy?",
+    "goldArticles": ["Milky Way"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["sagittarius a", "supermassive black hole", "black hole"]],
     "answerable": true,
     "modes": ["quick", "thorough"]
   },
@@ -30,8 +140,358 @@
     "modes": ["quick", "thorough"]
   },
   {
+    "id": "photosynthesis-cyanobacteria",
+    "question": "Which organisms are credited with producing the oxygen that made complex life on Earth possible?",
+    "goldArticles": ["Photosynthesis"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": ["cyanobacteria"],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "photosystem-water-split",
+    "question": "In oxygenic photosynthesis, what molecule is broken apart to supply electrons?",
+    "goldArticles": ["Photosystem"],
+    "goldSection": "In oxygenic photosynthesis",
+    "goldAnchor": "In_oxygenic_photosynthesis",
+    "keyFacts": [["water"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "dna-sugar",
+    "question": "Which sugar forms part of the backbone of a DNA molecule?",
+    "goldArticles": ["DNA"],
+    "goldSection": "Properties",
+    "goldAnchor": "Properties",
+    "keyFacts": [["deoxyribose"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "evolution-origin-of-species",
+    "question": "In which book did Charles Darwin first set out his theory of evolution in detail?",
+    "goldArticles": ["Evolution", "On the Origin of Species", "Charles Darwin"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["origin of species"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "human-brain-neurons",
+    "question": "About how many neurons does the human brain contain?",
+    "goldArticles": ["Human brain"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["86 billion", "86"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "immune-adaptive-vaccination",
+    "question": "Which property of the immune system is the basis for how vaccination works?",
+    "goldArticles": ["Immune system"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["adaptive immunity", "adaptive"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "penicillin-florey-chain",
+    "question": "Which researchers purified penicillin into a usable drug, and at which university?",
+    "goldArticles": ["Penicillin"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["florey", "chain"], ["oxford"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "vaccine-smallpox",
+    "question": "Which disease was the first for which a vaccine was developed?",
+    "goldArticles": ["Vaccine", "Smallpox"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["smallpox"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "insulin-beta-cells",
+    "question": "Which cells in the human body produce insulin?",
+    "goldArticles": ["Insulin"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["beta cells", "beta"], ["pancrea"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "volcano-dormant",
+    "question": "What does it mean for a volcano to be described as dormant?",
+    "goldArticles": ["Volcano"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["holocene", "12,000"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "earthquake-largest",
+    "question": "What is the largest earthquake ever recorded by magnitude?",
+    "goldArticles": ["Earthquake"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["valdivia", "9.5"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "everest-mallory-irvine",
+    "question": "Which two climbers vanished near the summit during the 1924 Everest expedition?",
+    "goldArticles": ["Mount Everest"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["mallory"], ["irvine"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "nile-longest",
+    "question": "Which river is generally considered the longest in the world?",
+    "goldArticles": ["Nile"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["nile"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "amazon-drainage-basin",
+    "question": "Which river has the largest drainage basin on Earth?",
+    "goldArticles": ["Amazon River"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["amazon"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "sahara-largest-hot-desert",
+    "question": "What is the largest hot desert in the world?",
+    "goldArticles": ["Sahara"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["sahara"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "pacific-challenger-deep",
+    "question": "Where is the deepest known point in any of the world's oceans?",
+    "goldArticles": ["Pacific Ocean", "Mariana Trench", "Challenger Deep"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["challenger deep", "mariana"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "france-capital",
+    "question": "Which city is the capital of France?",
+    "goldArticles": ["France", "Paris", "List of capitals of France"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": ["paris"],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "brazil-capital",
+    "question": "What is the capital city of Brazil?",
+    "goldArticles": ["Brazil", "Brasília"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["brasília", "brasilia"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "wwii-death-toll",
+    "question": "Roughly how many people died in World War II?",
+    "goldArticles": ["World War II"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["60", "75", "million"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "roman-empire-founding",
+    "question": "Under which ruler, and in what year, did the Roman Empire effectively begin?",
+    "goldArticles": ["Roman Empire", "Augustus"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["octavian", "augustus"], ["27"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "french-revolution-estates-general",
+    "question": "Which assembly was convened in 1789 at the start of the French Revolution?",
+    "goldArticles": ["French Revolution"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["estates general", "estates-general"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "cold-war-end",
+    "question": "What event in 1991 marked the end of the Cold War?",
+    "goldArticles": ["Cold War", "Dissolution of the Soviet Union"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["dissolution", "collapse", "soviet union"], ["1991"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "einstein-nobel",
+    "question": "For which discovery was Albert Einstein awarded the Nobel Prize in Physics?",
+    "goldArticles": ["Albert Einstein"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["photoelectric"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "marie-curie-1903-nobel",
+    "question": "With whom did Marie Curie share her 1903 Nobel Prize in Physics?",
+    "goldArticles": ["Marie Curie"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["pierre", "becquerel"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "darwin-expression-emotions",
+    "question": "Which 1872 book by Darwin is considered an early work of psychology and one of the first to use photographs?",
+    "goldArticles": ["Charles Darwin"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["expression of the emotions", "expression"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "shakespeare-tragedies",
+    "question": "Name a few of the major tragedies written by William Shakespeare.",
+    "goldArticles": ["William Shakespeare"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["hamlet", "othello", "king lear", "macbeth"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "internet-terminology",
+    "question": "What is the word 'Internet' a shortened form of?",
+    "goldArticles": ["Internet"],
+    "goldSection": "Terminology",
+    "goldAnchor": "Terminology",
+    "keyFacts": [["internetwork"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "transistor-inventors",
+    "question": "Who invented the first working transistor, and at which laboratory?",
+    "goldArticles": ["Transistor"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["bardeen", "brattain", "shockley"], ["bell"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "www-berners-lee",
+    "question": "Who invented the World Wide Web, and at which organization?",
+    "goldArticles": ["World Wide Web"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["berners-lee", "berners lee"], ["cern"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "pythagorean-statement",
+    "question": "What relationship between the sides of a right triangle does the Pythagorean theorem express?",
+    "goldArticles": ["Pythagorean theorem"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["hypotenuse"], ["square", "squares"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "mona-lisa-painter",
+    "question": "Who painted the Mona Lisa, and where is it displayed today?",
+    "goldArticles": ["Mona Lisa", "Leonardo da Vinci"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["leonardo"], ["louvre"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "jazz-origin",
+    "question": "In which American city did jazz first emerge?",
+    "goldArticles": ["Jazz"],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [["new orleans"]],
+    "answerable": true,
+    "modes": ["quick", "thorough"]
+  },
+  {
     "id": "unanswerable-fictional",
     "question": "What is the population of the city of Zubrowka Prime on Mars?",
+    "goldArticles": [],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [],
+    "answerable": false,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "unanswerable-future-worldcup",
+    "question": "Which country won the 2042 FIFA World Cup?",
+    "goldArticles": [],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [],
+    "answerable": false,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "unanswerable-realtime-stock",
+    "question": "What was the closing share price of Apple stock yesterday?",
+    "goldArticles": [],
+    "goldSection": "",
+    "goldAnchor": "",
+    "keyFacts": [],
+    "answerable": false,
+    "modes": ["quick", "thorough"]
+  },
+  {
+    "id": "unanswerable-personal-info",
+    "question": "What is the phone number and home address of my next-door neighbor?",
     "goldArticles": [],
     "goldSection": "",
     "goldAnchor": "",

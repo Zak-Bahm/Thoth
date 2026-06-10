@@ -1,13 +1,84 @@
 # Seed article titles for eval/extract_cases.py (Phase 0).
 # One exact ZIM article title per line. Lines starting with '#' are ignored.
 # Pick titles known to exist in your ZIM; extraction pulls authoritative sections from each.
-Photosynthesis
+# Curated for topical variety (physics, chemistry, astronomy, biology, medicine,
+# geography, history, people, technology, mathematics, arts, earth science).
+
+# physics / chemistry
 Rayleigh scattering
-France
-Mount Everest
-Water
 Electron
+Photon
+Atom
+Periodic table
+Oxygen
+Carbon
+Helium
+Electricity
+Magnetism
+Energy
+Sound
+
+# astronomy
+Moon
+Sun
+Gravity
+Black hole
+Solar System
+Galaxy
+Milky Way
+
+# biology / medicine
+Photosynthesis
 Photosystem
-Great Wall of China
 DNA
+Evolution
+Mitochondrion
+Bacteria
+Virus
+Human brain
+Heart
+Immune system
+Penicillin
+Vaccine
+Insulin
+
+# earth science / geography
 Volcano
+Earthquake
+Plate tectonics
+Mount Everest
+Nile
+Amazon River
+Sahara
+Pacific Ocean
+France
+Japan
+Brazil
+Egypt
+
+# history
+World War II
+Roman Empire
+French Revolution
+Industrial Revolution
+Cold War
+
+# people
+Albert Einstein
+Isaac Newton
+Marie Curie
+Charles Darwin
+Leonardo da Vinci
+William Shakespeare
+
+# technology / mathematics
+Internet
+Transistor
+World Wide Web
+Artificial intelligence
+Prime number
+Pythagorean theorem
+
+# arts
+Mona Lisa
+Jazz
