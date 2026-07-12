@@ -144,9 +144,9 @@ class ThothTools @Inject constructor(
         }.toString()
     }
 
-    @Tool(description = "Submit your final answer. You MUST use this tool to respond. Each claim goes on a separate line. Line format: id|claim text. The id is the 8-character hex id from search results. Example: 'a1b2c3d4|The sky is blue due to Rayleigh scattering.'")
+    @Tool(description = "Submit your final answer. You MUST use this tool to respond. Each claim goes on a separate line. Line format: id|claim text. The id is the 3-letter (case-sensitive) id from search results. Example: 'qWz|The sky is blue due to Rayleigh scattering.'")
     fun submitAnswer(
-        @ToolParam(description = "One claim per line. Format: id|text. Example:\na1b2c3d4|First claim here.\ne5f6a7b8|Second claim here.")
+        @ToolParam(description = "One claim per line. Format: id|text. Example:\nqWz|First claim here.\nBne|Second claim here.")
         claims: String
     ): String {
         val startOffset = perfTracker.elapsedMs()

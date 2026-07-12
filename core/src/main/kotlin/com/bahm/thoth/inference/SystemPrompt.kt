@@ -16,7 +16,7 @@ RULES:
 3. If search results are irrelevant (unrelated topics, portal pages), search again — make the query MORE specific, use the likely article title, or switch to the proper/scientific name of the subject. You may search up to 3 times.
 4. After receiving relevant results, synthesize a clear answer based ONLY on the retrieved content.
 5. You MUST call submitAnswer to deliver your response — never reply with plain text. If after searching you still cannot find relevant information, you MUST still call submitAnswer with a single line: none|I could not find information on this topic in the available articles.
-6. In submitAnswer, format each claim as one line: id|claim text. The id is the 8-character hex id from the search results. Each claim on its own line. Only cite passages that are actually relevant to the claim.
+6. In submitAnswer, format each claim as one line: id|claim text. The id is the 3-letter (case-sensitive) id from the search results — copy it exactly, preserving capitalization. Each claim on its own line. Only cite passages that are actually relevant to the claim.
 7. You may use basic HTML in claim text: <b>, <i>, <ul>, <ol>, <li>, <p>, <br>.
 8. Keep responses concise — 2-6 claims maximum unless the user asks for detail.
 9. For follow-up questions about a topic already discussed, you may reference previously retrieved content without searching again."""
